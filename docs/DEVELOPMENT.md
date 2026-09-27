@@ -464,6 +464,15 @@ For production, `NUXT_BETTER_AUTH_SECRET` must be set, for example through a `.e
 NUXT_BETTER_AUTH_SECRET="$(openssl rand -base64 32)" docker compose up --build -d
 ```
 
+### Plesk (ygo-alpha.de)
+
+Production runs on a Plesk host through its Node.js support (Passenger); see [ADR 0028](adr/0028-plesk-deployment.md) for the layout. Plesk settings: application root = the domain folder, document root = its `httpdocs`, startup file `server.cjs`, Node.js 24, production mode. The server's `.env` holds the settings (`NUXT_BETTER_AUTH_SECRET`, `NUXT_PUBLIC_BETTER_AUTH_URL`, `NUXT_INVITE_CODE`, `NUXT_ADMIN_TOKEN`, `NUXT_ASSISTANT_*`); deploys don't touch it or `data/`.
+
+- **From GitHub:** Actions → Deploy → Run workflow (on `main`). The secrets live in the `production` environment.
+- **From a checkout:** `DEPLOY_SSH=user@host DEPLOY_PATH=/example.com DEPLOY_URL=https://example.com scripts/deploy-plesk.sh`
+- **Rollback:** on the server, move `.output.prev` back to `.output` and `touch tmp/restart.txt`. Database backups from before each deploy are in `data/backups/` (last 5).
+- **Startup errors:** `tmp/startup.log` on the server.
+
 On a public host, also set `NUXT_INVITE_CODE` (otherwise anyone can register) and, if you want to run the catalog syncs there, `NUXT_ADMIN_TOKEN` (for example `openssl rand -hex 32`); see [ADR 0027](adr/0027-invite-code-and-admin-token.md).
 
 ## Project Structure
