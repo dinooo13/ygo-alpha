@@ -105,7 +105,8 @@ chmod 711 .output
 mkdir -p httpdocs
 find httpdocs -mindepth 1 -delete
 cp -R .output/public/. httpdocs/
-chmod -R u+rwX,go+rX,go-w httpdocs
+# The folder itself keeps Plesk's permissions; only its contents are ours.
+find httpdocs -mindepth 1 -exec chmod u+rwX,go+rX,go-w {} +
 
 mkdir -p tmp
 touch tmp/restart.txt
