@@ -35,3 +35,4 @@ mark the old as superseded.
 | [0025](0025-primary-artwork-and-set-facet.md) | Primary artwork and the set facet | Accepted |
 | [0026](0026-proposal-ends-the-assistant-turn.md) | A proposal ends the assistant turn | Accepted |
 | [0027](0027-invite-code-and-admin-token.md) | Invite-only sign-up and an admin token for the catalog syncs | Accepted |
+| [0028](0028-plesk-deployment.md) | Deployment to the Plesk host | Accepted |
