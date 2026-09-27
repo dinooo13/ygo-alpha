@@ -36,3 +36,4 @@ mark the old as superseded.
 | [0026](0026-proposal-ends-the-assistant-turn.md) | A proposal ends the assistant turn | Accepted |
 | [0027](0027-invite-code-and-admin-token.md) | Invite-only sign-up and an admin token for the catalog syncs | Accepted |
 | [0028](0028-plesk-deployment.md) | Deployment to the Plesk host | Accepted |
+| [0029](0029-security-headers.md) | Security headers and a hash-based Content Security Policy | Accepted |

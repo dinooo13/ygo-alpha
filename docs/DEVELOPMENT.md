@@ -472,6 +472,7 @@ Production runs on a Plesk host through its Node.js support (Passenger); see [AD
 - **From a checkout:** `DEPLOY_SSH=user@host DEPLOY_PATH=/example.com DEPLOY_URL=https://example.com scripts/deploy-plesk.sh`
 - **Rollback:** on the server, move `.output.prev` back to `.output` and `touch tmp/restart.txt`. Database backups from before each deploy are in `data/backups/` (last 5).
 - **Startup errors:** `tmp/startup.log` on the server.
+- **Security headers:** the production build sends a hash-based Content Security Policy, HSTS and the usual hardening headers ([ADR 0029](adr/0029-security-headers.md)). A new external source (image host, script, embed) has to be added to `server/utils/security-headers.ts`.
 
 On a public host, also set `NUXT_INVITE_CODE` (otherwise anyone can register) and, if you want to run the catalog syncs there, `NUXT_ADMIN_TOKEN` (for example `openssl rand -hex 32`); see [ADR 0027](adr/0027-invite-code-and-admin-token.md).
 
