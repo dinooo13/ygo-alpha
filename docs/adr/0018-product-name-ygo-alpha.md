@@ -81,9 +81,9 @@ nominative use, and players need it to understand what the app does.
 
 ## Consequences
 
-- The GitHub repository is still `dinooo13/yugioh-alpha`. Renaming it is
-  up to the owner; afterwards the repo URL in the card-text sync
-  User-Agent and the git remotes follow.
+- The GitHub repository was renamed from `dinooo13/yugioh-alpha` to
+  `dinooo13/ygo-alpha`; the repo URL in the card-text sync User-Agent
+  follows, and local clones update their remote.
 - Accepted ADRs keep the old name in their text; they are history.
 - Anyone installing the PWA sees "YGO Alpha"; existing installs switch on
   their next manifest update.

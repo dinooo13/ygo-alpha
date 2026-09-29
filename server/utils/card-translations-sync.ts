@@ -29,7 +29,7 @@ export const TRANSLATION_DIRS: Partial<Record<AppLocale, string>> = { de: 'de' }
 /** Below this many valid files per locale, the archive is treated as broken. */
 export const DEFAULT_MIN_TRANSLATION_FILES = 5000
 
-const USER_AGENT = 'ygo-alpha catalog sync (https://github.com/dinooo13/yugioh-alpha)'
+const USER_AGENT = 'ygo-alpha catalog sync (https://github.com/dinooo13/ygo-alpha)'
 const HEAD_SHA_TIMEOUT_MS = 15_000
 const TARBALL_TIMEOUT_MS = 120_000
 const CHUNK_SIZE = 500
