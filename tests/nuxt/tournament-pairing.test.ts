@@ -211,6 +211,15 @@ describe('pairRoundRobinRound', () => {
     ))
   })
 
+  it('lets withdrawn win over dropped: the fixture is kept, not turned into a bye', () => {
+    const participants = [p('a', 1), p('b', 2, { dropped: true, withdrawn: true }), p('c', 3), p('d', 4)]
+    // Round 1 is [[a,d],[b,c]]: b stays paired with c (a void match) instead of c getting a bye.
+    expect(pairRoundRobinRound(participants, 1)).toEqual([
+      { tableNumber: 1, participantAId: 'a', participantBId: 'd' },
+      { tableNumber: 2, participantAId: 'b', participantBId: 'c' },
+    ])
+  })
+
   it('returns an empty pairing set beyond the schedule length', () => {
     const participants = [p('a', 1), p('b', 2), p('c', 3), p('d', 4)]
     expect(pairRoundRobinRound(participants, 4)).toEqual([])
