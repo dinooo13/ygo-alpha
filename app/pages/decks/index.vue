@@ -146,6 +146,13 @@ onMounted(() => {
   }
 })
 
+const isImportOpen = ref(false)
+
+async function onImported(deck: { id: string }) {
+  toast.add({ title: t('decks.import.toast.created'), color: 'success' })
+  await navigateTo(`/decks/${deck.id}`)
+}
+
 function openRename(deck: DeckListItem) {
   editingDeck.value = deck
   isFormOpen.value = true
@@ -279,6 +286,13 @@ function statusColor(deck: DeckListItem) {
       :description="count('decks.list.count', total)"
     >
       <template #actions>
+        <UButton
+          icon="i-lucide-file-up"
+          color="neutral"
+          variant="outline"
+          :label="t('decks.list.importDeck')"
+          @click="() => { isImportOpen = true }"
+        />
         <UButton
           icon="i-lucide-plus"
           class="btn-summon"
@@ -484,6 +498,11 @@ function statusColor(deck: DeckListItem) {
       v-model:open="isFormOpen"
       :initial-values="editingDeck"
       @saved="onSaved"
+    />
+
+    <DecksDeckImportModal
+      v-model:open="isImportOpen"
+      @created="onImported"
     />
 
     <SharingShareModal

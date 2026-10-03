@@ -63,7 +63,8 @@
         "complete": "Alle Karten im Besitz",
         "missing": "{count} fehlt im Besitz | {count} fehlen im Besitz"
       },
-      "cardCount": "{count} Karte | {count} Karten"
+      "cardCount": "{count} Karte | {count} Karten",
+      "importDeck": "Deck importieren"
     },
     "form": {
       "createTitle": "Neues Deck",
@@ -176,6 +177,49 @@
         "xyz": "Xyz",
         "link": "Link",
         "other": "Sonstige"
+      }
+    },
+    "import": {
+      "title": "Deck importieren",
+      "description": "Füge eine Deckliste ein oder lade eine .ydk-Datei hoch. Erkannt werden YDK, ydke://-Links, YGO-Omega-Deckcodes und Textlisten (Rezept).",
+      "reviewDescription": "Prüfe die erkannten Karten. Offene Zeilen müssen einer Karte zugeordnet oder entfernt werden.",
+      "list": {
+        "label": "Deckliste",
+        "description": "Einfügen: Omega-Deckcode, ydke://-Link, YDK-Inhalt oder eine Liste wie „3 Dunkler Magier“.",
+        "placeholder": "Monster\n3 Dark Magician\nSpell\n2 Polymerization\nExtra\n1 Stardust Dragon\nSide\n2 Cosmic Cyclone"
+      },
+      "file": {
+        "label": "YDK-Datei",
+        "pick": "YDK-Datei wählen",
+        "hint": "Oder eine .ydk-Datei hochladen."
+      },
+      "analyze": "Deckliste prüfen",
+      "back": "Zurück",
+      "create": "Deck anlegen",
+      "format": "Format (optional)",
+      "detected": "Erkannt: {format}",
+      "formats": {
+        "ydke": "ydke://-Link",
+        "omega": "YGO-Omega-Deckcode",
+        "ydk": "YDK",
+        "text": "Textliste"
+      },
+      "cardCount": "{count} Karte | {count} Karten",
+      "sectionEmpty": "Keine Karten.",
+      "sizeWarningTitle": "Das Deck weicht von den üblichen Größen ab",
+      "unresolvedHint": "Einige Zeilen sind noch offen. Wähle eine Karte oder entferne die Zeile, um das Deck anzulegen.",
+      "defaultName": "Importiertes Deck",
+      "errors": {
+        "empty": "Bitte zuerst eine Deckliste einfügen oder eine Datei wählen.",
+        "tooLong": "Die Deckliste ist zu lang (höchstens {max} Zeichen).",
+        "tooManyCards": "Ein Deck kann beim Anlegen höchstens {max} verschiedene Karten haben.",
+        "fileTooLarge": "Die Datei ist zu groß für eine Deckliste.",
+        "fileUnreadable": "Die Datei konnte nicht gelesen werden.",
+        "previewFailed": "Die Deckliste konnte nicht gelesen werden.",
+        "createFailed": "Das Deck konnte nicht angelegt werden."
+      },
+      "toast": {
+        "created": "Deck importiert"
       }
     }
   }
