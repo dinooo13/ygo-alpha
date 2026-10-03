@@ -176,7 +176,7 @@ Recognizing a card from a photo now lives in the chat assistant
 ## Inventar und Sammlungen
 
 The inventory is the master list; collections partition it (a copy is in one
-collection or none, [ADR 0030](adr/0030-collections-built-by-moving-copies.md)).
+collection or none, [ADR 0032](adr/0032-collections-built-by-moving-copies.md)).
 Collections are built by moving copies:
 
 - `POST /api/inventory/move` takes up to 200 `{ ownedCardId, quantity?,

@@ -14,7 +14,7 @@ type Db = ReturnType<typeof useDb>
 
 /**
  * "Sammlung aus Deck befüllen": moves the owned copies a deck needs into one
- * collection. A deck is a list of catalog cards (ADR 0004, 0030), so what it
+ * collection. A deck is a list of catalog cards (ADR 0004, 0032), so what it
  * needs is the sum of main, extra and side per card; the copies come from the
  * chosen source collections, in the order given, and collections partition
  * the copies (no copy is in two places), so the move never double counts.

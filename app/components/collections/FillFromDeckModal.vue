@@ -7,7 +7,7 @@ import type { CollectionItem } from '~/composables/useCollections'
  * "Sammlung aus Deck befüllen": moves the owned copies a deck needs (main +
  * extra + side per card) into a collection. The inventory is the master list
  * and collections partition it, so the copies leave the collection they were
- * in; the deck itself is not touched (ADR 0004, 0030).
+ * in; the deck itself is not touched (ADR 0004, 0032).
  *
  * 1. Pick the deck (unless one is given), the target collection (existing or
  *    new) and the sources, "ohne Sammlung" first, then the other collections;
