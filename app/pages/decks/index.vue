@@ -205,6 +205,16 @@ async function deleteDeck(deck: DeckListItem) {
   }
 }
 
+// "Sammlung befüllen": moves the copies a deck needs into a collection.
+const { data: collectionsData } = await useCollections()
+const fillDeck = ref<DeckListItem | null>(null)
+const isFillOpen = ref(false)
+
+function openFill(deck: DeckListItem) {
+  fillDeck.value = deck
+  isFillOpen.value = true
+}
+
 function menuItemsFor(deck: DeckListItem) {
   return [[
     {
@@ -221,6 +231,11 @@ function menuItemsFor(deck: DeckListItem) {
       label: t('decks.menu.duplicate'),
       icon: 'i-lucide-copy',
       onSelect: () => duplicateDeck(deck),
+    },
+    {
+      label: t('decks.menu.fillCollection'),
+      icon: 'i-lucide-folder-input',
+      onSelect: () => openFill(deck),
     },
     {
       label: t('decks.menu.share'),
@@ -503,6 +518,12 @@ function statusColor(deck: DeckListItem) {
     <DecksDeckImportModal
       v-model:open="isImportOpen"
       @created="onImported"
+    />
+
+    <CollectionsFillFromDeckModal
+      v-model:open="isFillOpen"
+      :deck-id="fillDeck?.id ?? null"
+      :collections="collectionsData?.items ?? []"
     />
 
     <SharingShareModal

@@ -9,7 +9,8 @@
     "menu": {
       "optionsFor": "Options for {name}",
       "rename": "Rename",
-      "share": "Share"
+      "share": "Share",
+      "fillFromDeck": "Fill from deck …"
     },
     "form": {
       "renameTitle": "Rename collection",
@@ -32,6 +33,45 @@
     "createEllipsis": "New collection…",
     "target": {
       "placeholder": "Choose a collection…"
+    },
+    "fill": {
+      "title": "Fill collection from deck",
+      "description": "Moves the cards a deck needs (main, extra and side) from your inventory into a collection. They leave the collection they were in, so nothing is counted twice. The deck stays as it is.",
+      "deck": "Deck",
+      "deckPlaceholder": "Choose a deck …",
+      "target": "Target collection",
+      "sources": "Take cards from",
+      "sourcesHint": "In this order: cards without a collection first, then the other collections. What already is in the target collection counts.",
+      "planning": "Working out the preview …",
+      "summary": {
+        "toMove": "{count} to move",
+        "alreadyThere": "{count} already in the collection",
+        "missing": "{count} missing"
+      },
+      "nothingToMove": "There is nothing to move from the chosen sources.",
+      "list": {
+        "move": "Will be moved",
+        "moved": "Moved",
+        "missing": "Missing"
+      },
+      "from": "from {collection}",
+      "missingCount": "{count} missing",
+      "elsewhere": "{count} in other collections",
+      "complete": "The deck is complete in this collection.",
+      "run": "Fill collection",
+      "result": {
+        "moved": "Moved {count} card to \"{collection}\". | Moved {count} cards to \"{collection}\"."
+      },
+      "wishlist": {
+        "add": "{count} card to the wishlist | {count} cards to the wishlist",
+        "done": "On the wishlist",
+        "success": "{count} card added to the wishlist | {count} cards added to the wishlist",
+        "failed": "The wishlist couldn't be updated."
+      },
+      "errors": {
+        "planFailed": "The preview couldn't be worked out.",
+        "runFailed": "The collection couldn't be filled."
+      }
     }
   }
 }

@@ -622,6 +622,7 @@ async function onMoved() {
           :unassigned-count="unassignedCount"
           @changed="onCollectionsChanged"
           @deleted="onCollectionDeleted"
+          @filled="refreshAll"
         />
 
         <div class="flex flex-wrap items-center gap-2">
