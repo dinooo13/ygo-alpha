@@ -2,11 +2,13 @@ import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { useDb } from '../db'
 import { catalogCard, ownedCard } from '../db/schema'
+import { cardKindClause, parseCardKinds } from './card-kind-sql'
 import { cardNameMatches, cardTextMatches } from './card-name-search'
 import { primaryImageUrlSql } from './card-image-sql'
 import { cardNameDeSql } from './card-translation-sql'
 import { parseQueryFlag } from './query-flag'
 import { UNASSIGNED_COLLECTION_ID } from '../../shared/inventory'
+import type { CardKind } from '../../shared/card-kind'
 
 export { UNASSIGNED_COLLECTION_ID }
 
@@ -23,12 +25,18 @@ const MAX_PAGE_SIZE = 60
 export interface InventorySearchFilters {
   q?: string
   inText: boolean
+  // The grouped "Kartenart" filter (shared/card-kind.ts), next to the exact `type`.
+  kind: CardKind[]
   type: string[]
   attribute: string[]
   race: string[]
   level: number[]
   // A collection id owned by the caller, or `UNASSIGNED_COLLECTION_ID`.
   collectionId?: string
+  // With a real `collectionId`: only that collection's copies count, in the
+  // quantities and the breakdown too (`?scoped=1`). Off, the collection only
+  // gates which cards qualify (see `buildInventorySearchWhere`).
+  scoped: boolean
   sort: InventorySearchSort
   page: number
   pageSize: number
@@ -106,11 +114,13 @@ export function parseInventorySearchQuery(rawQuery: Record<string, unknown>): In
   return {
     q: toTrimmedString(rawQuery.q),
     inText: parseQueryFlag(rawQuery.inText),
+    kind: parseCardKinds(toStringArray(rawQuery.kind)),
     type: toStringArray(rawQuery.type),
     attribute: toStringArray(rawQuery.attribute),
     race: toStringArray(rawQuery.race),
     level: toIntArray(rawQuery.level),
     collectionId: toTrimmedString(rawQuery.collectionId),
+    scoped: parseQueryFlag(rawQuery.scoped),
     sort: toSort(rawQuery.sort),
     page: toPositiveInt(rawQuery.page, DEFAULT_PAGE),
     pageSize,
@@ -118,11 +128,11 @@ export function parseInventorySearchQuery(rawQuery: Record<string, unknown>): In
 }
 
 /** The per-card part of the inventory filters, shared by the search and the "Liste" (#145). */
-export type InventoryCardFilters = Pick<InventorySearchFilters, 'q' | 'inText' | 'type' | 'attribute' | 'race' | 'level'>
+export type InventoryCardFilters = Pick<InventorySearchFilters, 'q' | 'inText' | 'kind' | 'type' | 'attribute' | 'race' | 'level'>
 
 /**
  * The WHERE clauses that filter by catalog card properties: the name (and,
- * with `inText`, the card text) and the type/attribute/race/level facets.
+ * with `inText`, the card text) and the kind/type/attribute/race/level facets.
  * The outer query must join `catalog_card` unaliased. Used by the aggregated
  * search below and by the inventory list (`listOwnedCards`).
  */
@@ -139,6 +149,10 @@ export function inventoryCardFilterClauses(filters: InventoryCardFilters): SQL[]
     )
   }
 
+  const kindClause = cardKindClause(filters.kind)
+  if (kindClause) {
+    clauses.push(kindClause)
+  }
   if (filters.type.length > 0) {
     clauses.push(inArray(catalogCard.type, filters.type) as SQL)
   }
@@ -164,6 +178,8 @@ export function inventoryCardFilterClauses(filters: InventoryCardFilters): SQL[]
  * evaluated) — it gates *which* cards qualify without restricting which of
  * that card's owned rows are summed/broken down, so a card's full
  * cross-collection picture is preserved even when filtering by collection.
+ * The deck builder's "Quelle" asks for `scoped` instead: then it is a plain
+ * row filter, and the quantities are that collection's copies only.
  */
 export function buildInventorySearchWhere(userId: string, filters: InventorySearchFilters): SQL {
   const clauses: SQL[] = [eq(ownedCard.userId, userId), ...inventoryCardFilterClauses(filters)]
@@ -172,7 +188,9 @@ export function buildInventorySearchWhere(userId: string, filters: InventorySear
     clauses.push(
       filters.collectionId === UNASSIGNED_COLLECTION_ID
         ? (isNull(ownedCard.collectionId) as SQL)
-        : sql`EXISTS (
+        : filters.scoped
+          ? (eq(ownedCard.collectionId, filters.collectionId) as SQL)
+          : sql`EXISTS (
             SELECT 1 FROM ${ownedCard} AS oc_collection_filter
             WHERE oc_collection_filter.catalog_card_id = ${ownedCard.catalogCardId}
               AND oc_collection_filter.user_id = ${userId}

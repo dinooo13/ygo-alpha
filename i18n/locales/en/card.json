@@ -35,7 +35,8 @@
       "type": "Type",
       "attribute": "Attribute",
       "race": "Monster type",
-      "level": "Level/Rank"
+      "level": "Level/Rank",
+      "kind": "Card kind"
     },
     "value": {
       "type": {
@@ -113,6 +114,19 @@
         "ritual": "Ritual",
         "counter": "Counter"
       }
+    },
+    "kind": {
+      "normal": "Normal",
+      "effect": "Effect",
+      "ritual": "Ritual",
+      "fusion": "Fusion",
+      "synchro": "Synchro",
+      "xyz": "XYZ",
+      "link": "Link",
+      "pendulum": "Pendulum",
+      "token": "Token",
+      "spell": "Spell",
+      "trap": "Trap"
     }
   }
 }

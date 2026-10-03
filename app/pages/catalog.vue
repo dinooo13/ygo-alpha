@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { cardFrame } from '~~/shared/card-frame'
+import { isCardKind } from '~~/shared/card-kind'
+import type { CardKind } from '~~/shared/card-kind'
 import { isPreviousHistoryEntry } from '~/utils/history-entry'
 import { csvQueryValue as csv, queryList } from '~/utils/query-list'
 import { CARD_LEVEL_ICON, cardLevel } from '~/utils/card-level'
@@ -48,6 +50,7 @@ const router = useRouter()
 
 const searchInput = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const debouncedSearch = ref(searchInput.value)
+const kind = ref<CardKind[]>(queryList(route.query.kind).filter(isCardKind))
 const type = ref<string[]>(queryList(route.query.type))
 const attribute = ref<string[]>(queryList(route.query.attribute))
 const race = ref<string[]>(queryList(route.query.race))
@@ -69,13 +72,14 @@ watch(searchInput, (value) => {
 })
 
 const filtersActive = computed(() =>
-  Boolean(debouncedSearch.value.trim() || type.value.length || attribute.value.length || race.value.length || level.value.length || setId.value),
+  Boolean(debouncedSearch.value.trim() || kind.value.length || type.value.length || attribute.value.length || race.value.length || level.value.length || setId.value),
 )
 
 const cardQuery = computed(() => ({
   q: debouncedSearch.value.trim() || undefined,
   // Only with a search text: ticking the box on an empty search changes nothing, so it doesn't refetch.
   inText: inText.value && debouncedSearch.value.trim() ? 1 : undefined,
+  kind: csv(kind.value),
   type: csv(type.value),
   attribute: csv(attribute.value),
   race: csv(race.value),
@@ -142,16 +146,17 @@ watch(pending, (value) => {
   }
 })
 
-watch([type, attribute, race, level, setId, sort, debouncedSearch, inText], () => {
+watch([kind, type, attribute, race, level, setId, sort, debouncedSearch, inText], () => {
   page.value = 1
 }, { deep: true })
 
-watch([debouncedSearch, inText, type, attribute, race, level, setId, sort, page], async () => {
+watch([debouncedSearch, inText, kind, type, attribute, race, level, setId, sort, page], async () => {
   await router.replace({
     query: {
       ...route.query,
       q: debouncedSearch.value.trim() || undefined,
       inText: inText.value ? '1' : undefined,
+      kind: csv(kind.value),
       type: csv(type.value),
       attribute: csv(attribute.value),
       race: csv(race.value),
@@ -202,6 +207,7 @@ function resetFilters() {
   searchInput.value = ''
   debouncedSearch.value = ''
   inText.value = false
+  kind.value = []
   type.value = []
   attribute.value = []
   race.value = []
@@ -263,8 +269,9 @@ async function onAddedToInventory() {
           :label="t('catalog.search.inText')"
         />
 
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-[repeat(5,minmax(0,1fr))_auto]">
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-[repeat(6,minmax(0,1fr))_auto]">
           <CardFacetFilters
+            v-model:kind="kind"
             v-model:type="type"
             v-model:attribute="attribute"
             v-model:race="race"

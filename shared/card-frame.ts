@@ -34,7 +34,7 @@ export type CardAttributeKey = typeof CARD_ATTRIBUTES[number]
 // Extra Deck frames first ("Synchro Tuner Monster" is synchro, "Ritual
 // Effect Monster" is ritual), then the non-monster cards, then Normal
 // monsters; any other monster has an Effect frame.
-const TYPE_KEYWORDS: Array<[string, CardFrame]> = [
+export const CARD_FRAME_TYPE_KEYWORDS: ReadonlyArray<readonly [string, CardFrame]> = [
   ['link', 'link'],
   ['xyz', 'xyz'],
   ['synchro', 'synchro'],
@@ -71,7 +71,7 @@ export function cardFrame(card: { type?: string | null, frameType?: string | nul
     return null
   }
   const pendulum = type.includes('pendulum')
-  const match = TYPE_KEYWORDS.find(([keyword]) => type.includes(keyword))
+  const match = CARD_FRAME_TYPE_KEYWORDS.find(([keyword]) => type.includes(keyword))
   return { frame: match?.[1] ?? 'effect', pendulum }
 }
 

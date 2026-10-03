@@ -142,7 +142,13 @@
         "addTo": "{name} zum {section} hinzufügen",
         "noSection": "{name} kann in keine Sektion dieses Decks aufgenommen werden.",
         "loadMore": "Mehr laden",
-        "loadMoreFailed": "Weitere Karten konnten nicht geladen werden."
+        "loadMoreFailed": "Weitere Karten konnten nicht geladen werden.",
+        "kind": "Kartenart",
+        "allKinds": "Alle Kartenarten",
+        "source": "Quelle",
+        "sourceAll": "Alle Sammlungen",
+        "sourceNone": "Ohne Sammlung",
+        "ownedInSource": "In {source}: {owned} · im Deck: {inDeck}"
       },
       "overlay": {
         "title": "Im Deck",

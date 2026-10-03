@@ -365,6 +365,37 @@ describe('inventory search aggregation (in-memory db)', () => {
     expect(result.items[0]).toMatchObject({ catalogCardId: 55144522 })
   })
 
+  it('scoped=1 counts only the chosen collection\'s copies (the deck builder\'s "Quelle")', async () => {
+    seedCards(db, [
+      { id: 46986414, name: 'Dark Magician', type: 'Normal Monster' },
+      { id: 55144522, name: 'Pot of Greed', type: 'Spell Card' },
+    ])
+    const box1 = await createCollection(db, 'user-a', { name: 'Box 1', description: null })
+    const box2 = await createCollection(db, 'user-a', { name: 'Box 2', description: null })
+
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, collection_id: box1.id, quantity: 3 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, quantity: 2 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 55144522, collection_id: box2.id, quantity: 1 }))
+
+    const scoped = runInventorySearch(db, 'user-a', { collectionId: box1.id, scoped: '1' })
+    expect(scoped.total).toBe(1)
+    expect(scoped.items[0]).toMatchObject({ catalogCardId: 46986414, totalQuantity: 3 })
+    expect(scoped.items[0]!.collectionBreakdown).toEqual([{ collectionId: box1.id, collectionName: 'Box 1', quantity: 3 }])
+
+    // "Ohne Sammlung" is a row filter either way.
+    const unassigned = runInventorySearch(db, 'user-a', { collectionId: UNASSIGNED_COLLECTION_ID, scoped: '1' })
+    expect(unassigned.items[0]).toMatchObject({ catalogCardId: 46986414, totalQuantity: 2 })
+
+    // Without the flag the inventory page keeps its cross-collection totals.
+    const gated = runInventorySearch(db, 'user-a', { collectionId: box1.id })
+    expect(gated.items[0]!.totalQuantity).toBe(5)
+
+    // A collection the card is not in: nothing, instead of the card's other copies.
+    expect(runInventorySearch(db, 'user-a', { collectionId: box2.id, scoped: '1' }).items.map(item => item.catalogCardId)).toEqual([55144522])
+    expect(parseInventorySearchQuery({ scoped: '1' }).scoped).toBe(true)
+    expect(parseInventorySearchQuery({}).scoped).toBe(false)
+  })
+
   it('still finds an owned retired card by name (ADR 0019)', async () => {
     seedCards(db, [{ id: 101402013, name: 'Leviathan of Atlantis - Daedalus', type: 'Effect Monster' }])
     db.update(schema.catalogCard).set({ retiredAt: new Date() }).run()

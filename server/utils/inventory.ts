@@ -4,6 +4,7 @@ import { createError } from 'h3'
 import type { useDb } from '../db'
 import { catalogCard, ownedCard } from '../db/schema'
 import { CARD_TEXT_EXCERPT_LENGTH, MAX_OWNED_QUANTITY, UNASSIGNED_COLLECTION_ID } from '../../shared/inventory'
+import type { CardKind } from '../../shared/card-kind'
 import type { AppLocale } from '../../shared/locale'
 import { activeCatalogCard, cardNameMatches, escapedLike, escapeLikeTerm } from './card-name-search'
 import { primaryImageUrlSql } from './card-image-sql'
@@ -40,6 +41,7 @@ export interface InventoryListOptions {
   catalogCardId?: number
   // The search panel's card filters, as in the aggregated search (#145).
   inText?: boolean
+  kind?: CardKind[]
   type?: string[]
   attribute?: string[]
   race?: string[]
@@ -486,7 +488,7 @@ export function parseInventoryListQuery(query: Record<string, unknown>): Invento
   const catalogCardId = typeof query.catalogCardId === 'string' ? Number(query.catalogCardId) : Number.NaN
   // The card filters parse like the aggregated search's (CSV and/or
   // repeated params).
-  const { inText, type, attribute, race, level } = parseInventorySearchQuery(query)
+  const { inText, kind, type, attribute, race, level } = parseInventorySearchQuery(query)
   return {
     q: typeof query.q === 'string' ? query.q : undefined,
     page: typeof query.page === 'string' ? Number(query.page) : undefined,
@@ -494,6 +496,7 @@ export function parseInventoryListQuery(query: Record<string, unknown>): Invento
     collectionId: typeof query.collectionId === 'string' && query.collectionId ? query.collectionId : undefined,
     catalogCardId: Number.isInteger(catalogCardId) && catalogCardId > 0 ? catalogCardId : undefined,
     inText,
+    kind,
     type,
     attribute,
     race,
@@ -510,6 +513,7 @@ export function listOwnedCards(db: Db, userId: string, options: InventoryListOpt
     ...inventoryCardFilterClauses({
       q,
       inText: options.inText ?? false,
+      kind: options.kind ?? [],
       type: options.type ?? [],
       attribute: options.attribute ?? [],
       race: options.race ?? [],

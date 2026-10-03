@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import type { CardKind } from '~~/shared/card-kind'
 import type { CardFacetOptions } from '~/components/card/CardFacetFilters.vue'
 
 export interface InventorySearchFilters {
+  kind: CardKind[]
   type: string[]
   attribute: string[]
   race: string[]
@@ -33,6 +35,7 @@ function resetFilters() {
   // `filters.value`) so fields owned by the parent (q, inText, page) that
   // this panel doesn't render controls for are left untouched. The
   // collection is the page's scope (URL), not a filter — Reset keeps it.
+  filters.value.kind = []
   filters.value.type = []
   filters.value.attribute = []
   filters.value.race = []
@@ -45,6 +48,7 @@ function resetFilters() {
   <div class="space-y-3">
     <div class="flex flex-wrap items-center gap-2">
       <CardFacetFilters
+        v-model:kind="filters.kind"
         v-model:type="filters.type"
         v-model:attribute="filters.attribute"
         v-model:race="filters.race"

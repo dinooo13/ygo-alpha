@@ -10,6 +10,8 @@ import type { DeckSection } from '~~/shared/deck-sections'
 import type { DeckValidation, DeckWarning } from '~~/shared/rule-formats'
 import type { Visibility } from '~~/shared/sharing'
 import { cardFrame } from '~~/shared/card-frame'
+import { CARD_KINDS } from '~~/shared/card-kind'
+import { UNASSIGNED_COLLECTION_ID } from '~~/shared/inventory'
 import { deckBreakdownGroups } from '~~/shared/deck-breakdown'
 import { compareDeckRows } from '~~/shared/deck-order'
 import type { CardDetailPreview } from '~/utils/card-detail'
@@ -137,7 +139,10 @@ usePageTitle(() => deck.value?.name ?? t('decks.editor.fallbackTitle'))
 
 const sourceSearch = ref('')
 const debouncedSourceSearch = ref('')
+const sourceKind = ref('')
 const sourceType = ref('')
+// "Quelle": '' = every collection, else a collection id or `UNASSIGNED_COLLECTION_ID`.
+const sourceCollectionId = ref('')
 const sourceAttribute = ref('')
 const includeCatalog = ref(false)
 const sourceInText = ref(false)
@@ -156,8 +161,12 @@ const sourceQuery = computed(() => ({
   q: debouncedSourceSearch.value || undefined,
   // Also match the card text (#148); only meaningful with a search term.
   inText: sourceInText.value && debouncedSourceSearch.value ? 1 : undefined,
+  kind: sourceKind.value || undefined,
   type: sourceType.value || undefined,
   attribute: sourceAttribute.value || undefined,
+  // A collection counts only its own copies (`scoped`); the catalog has none.
+  collectionId: !includeCatalog.value && sourceCollectionId.value ? sourceCollectionId.value : undefined,
+  scoped: !includeCatalog.value && sourceCollectionId.value ? 1 : undefined,
   sort: 'name',
   page: 1,
   pageSize: SOURCE_PAGE_SIZE,
@@ -295,9 +304,15 @@ const validationBadge = computed(() => {
 // reka-ui reserves the empty string for "clear selection", so the "no filter"
 // options use sentinels that map back to '' (same convention as
 // InventorySearchPanel).
+const ALL_KINDS = '__all_kinds__'
 const ALL_TYPES = '__all_types__'
+const ALL_SOURCES = '__all_sources__'
 const ALL_ATTRIBUTES = '__all_attributes__'
 
+const kindItems = computed(() => [
+  { label: t('decks.editor.addPanel.allKinds'), value: ALL_KINDS },
+  ...CARD_KINDS.map(value => ({ label: t(`card.kind.${value}`), value })),
+])
 const typeItems = computed(() => [
   { label: t('decks.editor.addPanel.allTypes'), value: ALL_TYPES },
   ...cardValueOptions('type', facets.value?.types ?? []),
@@ -307,11 +322,37 @@ const attributeItems = computed(() => [
   ...cardValueOptions('attribute', facets.value?.attributes ?? []),
 ])
 
+const kindSelection = computed({
+  get: () => sourceKind.value || ALL_KINDS,
+  set: (value: string) => {
+    sourceKind.value = value === ALL_KINDS ? '' : value
+  },
+})
 const typeSelection = computed({
   get: () => sourceType.value || ALL_TYPES,
   set: (value: string) => {
     sourceType.value = value === ALL_TYPES ? '' : value
   },
+})
+// "Quelle": all collections, the copies without one, or one collection.
+const { data: collectionsData } = await useCollections()
+const sourceOptions = computed(() => [
+  { label: t('decks.editor.addPanel.sourceAll'), value: ALL_SOURCES },
+  { label: t('decks.editor.addPanel.sourceNone'), value: UNASSIGNED_COLLECTION_ID },
+  ...collectionsData.value.items.map(collection => ({ label: collection.name, value: collection.id })),
+])
+const sourceSelection = computed({
+  get: () => sourceCollectionId.value || ALL_SOURCES,
+  set: (value: string) => {
+    sourceCollectionId.value = value === ALL_SOURCES ? '' : value
+  },
+})
+// The shown owned counts are this collection's: "In Box 1: 2".
+const sourceLabel = computed(() => {
+  if (includeCatalog.value || !sourceCollectionId.value) {
+    return null
+  }
+  return sourceOptions.value.find(item => item.value === sourceCollectionId.value)?.label ?? null
 })
 const attributeSelection = computed({
   get: () => sourceAttribute.value || ALL_ATTRIBUTES,
@@ -1229,18 +1270,29 @@ const loadErrorDescription = computed(() => (error.value ? apiError(error.value,
                   :aria-label="t('decks.editor.addPanel.searchLabel')"
                   class="w-full"
                 />
-                <div class="flex gap-2">
+                <USelect
+                  v-model="sourceSelection"
+                  :items="sourceOptions"
+                  :disabled="includeCatalog"
+                  :aria-label="t('decks.editor.addPanel.source')"
+                  class="w-full"
+                />
+                <div class="grid grid-cols-2 gap-2">
+                  <USelect
+                    v-model="kindSelection"
+                    :items="kindItems"
+                    :aria-label="t('decks.editor.addPanel.kind')"
+                  />
                   <USelect
                     v-model="typeSelection"
                     :items="typeItems"
                     :aria-label="t('decks.editor.addPanel.type')"
-                    class="flex-1"
                   />
                   <USelect
                     v-model="attributeSelection"
                     :items="attributeItems"
                     :aria-label="t('decks.editor.addPanel.attribute')"
-                    class="flex-1"
+                    class="col-span-2"
                   />
                 </div>
                 <UCheckbox
@@ -1338,9 +1390,12 @@ const loadErrorDescription = computed(() => (error.value ? apiError(error.value,
                       />
                       <p class="mt-0.5 text-xs text-muted">
                         <i18n-t
-                          keypath="decks.editor.addPanel.ownedInDeck"
+                          :keypath="sourceLabel ? 'decks.editor.addPanel.ownedInSource' : 'decks.editor.addPanel.ownedInDeck'"
                           scope="global"
                         >
+                          <template #source>
+                            {{ sourceLabel }}
+                          </template>
                           <template #owned>
                             <span class="font-semibold tabular-nums">{{ card.owned }}</span>
                           </template>
