@@ -93,6 +93,21 @@ describe('previewDeckImport', () => {
     expect(link.sections.side[0]!.candidates[0]!.cardId).toBe(CATALOG_FIXTURE_IDS.raigeki)
   })
 
+  it('suggests the card just below a passcode Omega made up, without picking it', () => {
+    // Omega's own ids: an artwork one above the passcode, an errata version 20 above.
+    const ydk = previewDeckImport(db, `#main\n${CATALOG_FIXTURE_IDS.kuriboh + 1}\n${CATALOG_FIXTURE_IDS.raigeki + 20}\n`)
+    const [artwork, errata] = ydk.sections.main
+
+    expect(artwork!.candidates).toEqual([expect.objectContaining({ cardId: CATALOG_FIXTURE_IDS.kuriboh, matchedBy: 'near_passcode', score: 0.6 })])
+    expect(errata!.candidates[0]).toMatchObject({ cardId: CATALOG_FIXTURE_IDS.raigeki, matchedBy: 'near_passcode' })
+    const rows = createImportRows(ydk as DeckImportPreview)
+    expect(rows.map(row => row.selectedCardId)).toEqual([null, null])
+
+    // Further away, or above the passcode: no suggestion.
+    const far = previewDeckImport(db, `#main\n${CATALOG_FIXTURE_IDS.kuriboh + 26}\n${CATALOG_FIXTURE_IDS.kuriboh - 1}\n`)
+    expect(far.sections.main.map(result => result.candidates)).toEqual([[], []])
+  })
+
   it('rejects an empty list, too many entries and a broken link', () => {
     expect(statusOf(() => previewDeckImport(db, 'Monster\nSpell\n#main'))).toBe(400)
     expect(statusOf(() => previewDeckImport(db, 'ydke://nope'))).toBe(400)

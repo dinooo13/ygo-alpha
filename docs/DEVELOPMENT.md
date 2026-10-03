@@ -255,7 +255,10 @@ the four formats players exchange decks in (`shared/decklist.ts`, the reader is
 The import review (`POST /api/decks/import/preview`, read-only) matches every entry like
 quick capture does; unresolved lines must be matched or removed, and each resolved card
 goes to the section its type allows, because an Omega code doesn't separate Main from
-Extra. The deck is then created by `POST /api/decks`. Deck sizes outside the usual limits
+Extra. Omega exports some cards under ids of its own, a little above the passcode (an
+artwork, or an errata version at +20); an unknown passcode suggests the nearest card up
+to 25 below it (`near_passcode`, never picked automatically). The deck is then created by
+`POST /api/decks`. Deck sizes outside the usual limits
 only warn. The export needs a passcode per card (`catalog_card.id`); a copy without one is
 left out of the passcode formats and a toast says so. The text recipe uses the English names.
 

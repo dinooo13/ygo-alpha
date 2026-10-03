@@ -24,6 +24,127 @@ const OMEGA_CODE = '0+a6LjWfEYbv/L/MAMIXps0AY4kjoiww/PbQdlYYFuz7zgDDKmaXWGB4zsmP
 // Extra cards, 3 Side cards, then Cyber End Dragon (01546123) as the cover card.
 const OMEGA_CODE_WITH_COVER = 'M2c2mqjLAsP2338wZt6Zz/KTNYKZaVIH8znNu0xq/wIZKnKMGaYknWSs/hjI8HpKDmNCgSDDf54Y5ifnzBlgeN0VHcbzu7VYa7V/MNqtn8P8U3MfyyTNZIbfd0QYeYztmK7WXGDeuzyfsfbbfgavAk/mYytvsUjfMGd4r/qPRXpSIuMzhi+MOn8Dmdt4brC+Vw9kEOmdz/I7LYCx8LAFS9ziA4wlhg4M/b7bmH/PMmSeHRLBLHRzAZO150nW7uniDN0cL1gafAxZBbfdZH7Snc0S9GkHS+8CJlZu85/MMAxSBwA='
 const YDKE_SAMPLE = 'ydke://o6lXBZyFNAI=!viOnAg==!7ydRAA==!'
+// The same deck as OMEGA_CODE_WITH_COVER, as Omega's German "Rezept" and its YDK export.
+const OMEGA_RECIPE_DE = `Monster
+3 Cyber Drache
+1 Cyber-Eltanin
+1 Jinzo
+1 Cyberfinsternis Gewürm
+1 Cyber Drache Drei
+1 Hüter der Drachenmagie
+1 Cyber Drache Zwei
+1 Cyber Phönix
+1 Cyber Drache Vier
+1 Cyberfinsternis Schimäre
+1 Cyber Drachenmark
+1 Cyber Drache Nächster
+1 Cyber Drache Herz
+3 Cybertal
+1 Cyber-Jormungardr
+Zauber
+1 Cyber Reparaturwerkstatt
+1 Cyber-Drehsystem
+1 Cyber-Notfall
+1 Elegante Wohltäterin
+1 Fusionsentsendung
+1 Harpyien-Flederwisch
+1 Kraftbündnis
+1 Maschinenduplizierung
+1 Polymerisation
+1 Raigeki
+1 Topf der Gier
+1 Törichtes Begräbnis
+1 Überlastfusion
+1 Wiedergeburt
+1 Begrenzer-Entferner
+1 Cyber-Ewig
+1 Cyberlast-Fusion
+1 Feindkontrolle
+1 Mystischer Raum-Taifun
+1 Zukunftsfusion
+1 Megawandler
+1 Voreiliges Begräbnis
+Falle
+1 Bodenlose Fallgrube
+1 Fallgrube
+1 Magischer Zylinder
+1 Reißender Tribut
+1 Sakuretsu-Rüstung
+1 Spiegelkraft
+1 Ruf der Gejagten
+Extra
+1 Cyber End-Drache
+1 Cyber Ewigkeitsdrache
+1 Chimeratech-Megaflottendrache
+1 Chimeratech-Überdrache
+1 Cyber Zwillings-Drache
+1 Chimeratech-Festungsdrache
+1 Chimeratech-Amoklaufdrache
+Side
+3 Cyber Dragon, the Luminous Mech Dragon`
+const OMEGA_YDK = `#Created by YGO Omega
+#tags=
+#main
+70095154
+70095154
+70095154
+33093439
+77585513
+56100345
+59281922
+48048590
+5373478
+3370104
+29975188
+5370235
+23893227
+1142880
+56364287
+3657444
+3657444
+3657444
+19715246
+86686671
+33041277
+60600126
+79571449
+6498706
+18144507
+37630732
+63995093
+24094653
+12580477
+55144522
+81439174
+3659803
+83764719
+23171611
+32768230
+55704876
+98045062
+5318639
+77565204
+22046459
+70828913
+29401950
+4206964
+62279055
+53582587
+56120475
+44095762
+97077563
+#extra
+1546123
+82315403
+87116928
+64599569
+74157028
+79229522
+84058253
+!side
+66664203
+66664203
+66664203`
 
 const OMEGA_RECIPE = `Monster
 3 Tearlaments Havnis
@@ -147,6 +268,26 @@ describe('parseDecklist: YGO Omega deck code', () => {
     expect(parsed.sections.side).toEqual([{ passcode: 66664203, quantity: 3, raw: '66664203' }])
     expect(parsed.cover).toBe(1546123)
     expect(parseDecklist(OMEGA_CODE).cover).toBeNull()
+  })
+
+  it('reads the same deck from Omega\'s code, YDK and German recipe', () => {
+    const code = parseDecklist(OMEGA_CODE_WITH_COVER)
+    const ydk = parseDecklist(OMEGA_YDK)
+    const recipe = parseDecklist(OMEGA_RECIPE_DE)
+    const passcodes = (entries: DecklistEntry[]) => entries.map(entry => [entry.passcode, entry.quantity]).sort((a, b) => a[0]! - b[0]!)
+
+    expect(ydk.format).toBe('ydk')
+    // The code mixes Main and Extra; the YDK keeps them apart.
+    expect(passcodes(code.sections.main)).toEqual(passcodes(mergeDecklistEntries([...ydk.sections.main, ...ydk.sections.extra])))
+    expect(passcodes(code.sections.side)).toEqual(passcodes(ydk.sections.side))
+    expect(ydk.cover).toBeNull()
+
+    expect(recipe.format).toBe('text')
+    expect([copies(recipe.sections.main), copies(recipe.sections.extra), copies(recipe.sections.side)]).toEqual([48, 7, 3])
+    expect(copies(recipe.sections.main) + copies(recipe.sections.extra)).toBe(copies(code.sections.main))
+    // "Falle" is a header, not a card.
+    expect(recipe.sections.main.some(entry => entry.name === 'Falle')).toBe(false)
+    expect(recipe.sections.main.at(-1)).toMatchObject({ name: 'Ruf der Gejagten', quantity: 1 })
   })
 
   it('tolerates whitespace around the code and a wrapped line', () => {

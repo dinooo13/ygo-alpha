@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from 'drizzle-orm'
+import { and, between, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { createError } from 'h3'
 import { foldCardName } from '../../shared/card-name-fold'
@@ -27,7 +27,7 @@ const MIN_FUZZY_SCORE = 0.3
 const DEFAULT_SUGGEST_LIMIT = 5
 const MAX_SUGGEST_LIMIT = 20
 
-export type EntryMatchedBy = 'passcode' | 'set_code' | 'exact' | 'prefix' | 'contains' | 'fuzzy'
+export type EntryMatchedBy = 'passcode' | 'near_passcode' | 'set_code' | 'exact' | 'prefix' | 'contains' | 'fuzzy'
 
 export interface EntryCandidate {
   cardId: number
@@ -243,13 +243,25 @@ function tokenize(query: string): string[] {
 }
 
 const TIER_RANK: Record<EntryMatchedBy, number> = {
-  passcode: 5,
-  set_code: 4,
-  exact: 3,
-  prefix: 2,
-  contains: 1,
-  fuzzy: 0,
+  passcode: 6,
+  set_code: 5,
+  exact: 4,
+  prefix: 3,
+  contains: 2,
+  fuzzy: 1,
+  near_passcode: 0,
 }
+
+/**
+ * YGO Omega exports some cards under ids of its own, a little above the
+ * printed passcode: an artwork (Limiter Removal 23171611 for 23171610) or an
+ * errata version (+20, Cyberload Fusion 55704876 for 55704856). An unknown
+ * passcode suggests the nearest cards up to this far below it, scored under
+ * AUTO_SELECT_SCORE so the user confirms the pick.
+ */
+const NEAR_PASSCODE_RANGE = 25
+const NEAR_PASSCODE_SCORE = 0.6
+const NEAR_PASSCODE_CANDIDATES = 2
 
 interface ScoredCandidate extends CandidateRow {
   score: number
@@ -310,6 +322,12 @@ function collectScoredCandidates(db: Db, parsed: ParsedEntryLine, limit: number)
     if (passcode !== null) {
       for (const row of selectCards(db, eq(catalogCard.id, passcode), 1)) {
         remember({ ...row, score: 1, matchedBy: 'passcode' })
+      }
+    }
+    else {
+      const below = between(catalogCard.id, parsed.passcode - NEAR_PASSCODE_RANGE, parsed.passcode - 1)
+      for (const row of selectCards(db, below, NEAR_PASSCODE_CANDIDATES, desc(catalogCard.id))) {
+        remember({ ...row, score: NEAR_PASSCODE_SCORE, matchedBy: 'near_passcode' })
       }
     }
   }
