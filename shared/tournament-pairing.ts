@@ -7,11 +7,16 @@ export interface PairingParticipant {
   id: string
   /** 1-based, frozen when the tournament starts; final ordering tiebreak. */
   seed: number
-  /** Match points so far (3/1/0). Ignored by round robin. */
+  /** Match points so far (see shared/tournament-standings.ts). Ignored by round robin. */
   points: number
   /** Secondary sort key, normally OMW% from computeStandings(). Ignored by round robin. */
   tiebreak: number
   dropped: boolean
+  /**
+   * Taken out of the standings (ADR 0028). Swiss pairs them no more; round
+   * robin keeps their fixed fixtures, which are simply not scored.
+   */
+  withdrawn: boolean
   /** Ids of every previous opponent; byes are not included. */
   opponentIds: string[]
   hadBye: boolean
@@ -20,7 +25,7 @@ export interface PairingParticipant {
 export interface Pairing {
   tableNumber: number
   participantAId: string
-  /** null = bye (scored as a 2–0 win for A). */
+  /** null = bye (worth a 2–0 win or nothing, per the tournament's `byeScoring`). */
   participantBId: string | null
 }
 
@@ -75,7 +80,7 @@ function tryPair(list: PairingParticipant[], budget: StepBudget): PairingPartici
 }
 
 export function pairSwissRound(participants: PairingParticipant[]): Pairing[] {
-  const active = participants.filter(p => !p.dropped)
+  const active = participants.filter(p => !p.dropped && !p.withdrawn)
   if (active.length === 0) {
     return []
   }
@@ -168,7 +173,9 @@ export function roundRobinSchedule(participantIds: string[]): Array<Array<[strin
  * for `roundNumber`. Dropped participants stay in the seed-ordered circle (so
  * the schedule never shifts mid-tournament) and are only turned into a bye —
  * or dropped entirely, when both sides of a pair are dropped — after the
- * slice is taken.
+ * slice is taken. Withdrawn participants are not special-cased at all: their
+ * fixtures are still created (so reinstating them restores a complete
+ * schedule) and the standings and the UI treat those matches as void.
  */
 export function pairRoundRobinRound(participants: PairingParticipant[], roundNumber: number): Pairing[] {
   const droppedIds = new Set(participants.filter(p => p.dropped).map(p => p.id))

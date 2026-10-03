@@ -8,7 +8,13 @@ import type { StandingsRow } from './tournament-standings'
 // Scoring constants live in tournament-standings.ts (the standings path);
 // re-exported here so the pairing/round-creation path (server/utils/tournaments.ts)
 // uses the same values instead of a second, independently-maintained copy.
-export { BYE_GAMES, POINTS_DRAW, POINTS_WIN } from './tournament-standings'
+export {
+  BYE_GAMES,
+  POINTS_DRAW,
+  POINTS_LOSS_WITH_GAME,
+  POINTS_WIN,
+  POINTS_WIN_DROPPED_GAME,
+} from './tournament-standings'
 
 // --- Enums ----------------------------------------------------------------
 
@@ -17,6 +23,25 @@ export type TournamentStatus = typeof TOURNAMENT_STATUSES[number]
 
 export const PAIRING_SYSTEMS = ['swiss', 'round_robin'] as const
 export type PairingSystem = typeof PAIRING_SYSTEMS[number]
+
+/**
+ * How a match is turned into points (ADR 0028). `games`: 3 for a win without
+ * dropping a game, 2 for a win that dropped one, 1 for a loss that won a game,
+ * 0 otherwise — so a 2:0 outranks a 2:1. `match`: classic 3 / 0 (1 for a
+ * draw); what tournaments created before ADR 0028 keep.
+ */
+export const SCORING_SYSTEMS = ['games', 'match'] as const
+export type ScoringSystem = typeof SCORING_SYSTEMS[number]
+
+/**
+ * What a bye is worth. `none`: nothing — no points, no match played, no games.
+ * `win`: scored as a 2:0 win (the behavior before ADR 0028).
+ */
+export const BYE_SCORINGS = ['none', 'win'] as const
+export type ByeScoring = typeof BYE_SCORINGS[number]
+
+export const DEFAULT_SCORING: ScoringSystem = 'games'
+export const DEFAULT_BYE_SCORING: ByeScoring = 'none'
 
 export const ROUND_STATUSES = ['pending', 'completed'] as const
 export type RoundStatus = typeof ROUND_STATUSES[number]
@@ -41,8 +66,6 @@ export const MAX_PLANNED_ROUNDS = MAX_PARTICIPANTS - 1
 export const MAX_GAMES_PER_MATCH = 9
 /** Games recorded for the winner when a result is entered as a plain win. */
 export const DEFAULT_WIN_GAMES = 2
-/** Games recorded for both sides when a result is entered as a plain draw. */
-export const DEFAULT_DRAW_GAMES = 1
 export const POINTS_LOSS = 0
 /** Deck snapshot keeps at most this many rule-violation messages. */
 export const MAX_SNAPSHOT_ISSUES = 10
@@ -100,7 +123,13 @@ export interface TournamentParticipantDto {
   linked: boolean
   /** True when the row is the calling user. */
   isSelf: boolean
+  /** Left the tournament; past results count, no further pairings. */
   dropped: boolean
+  /**
+   * Taken out of the standings by the organizer (ADR 0028): none of this
+   * participant's matches count for anybody, and they are listed last.
+   */
+  withdrawn: boolean
   seed: number
   deckId: string | null
   deckName: string | null
@@ -127,8 +156,14 @@ export interface TournamentMatchDto {
   winnerParticipantId: string | null
   gamesA: number
   gamesB: number
+  /** Only legacy results: new results are never draws (ADR 0028). */
   isDraw: boolean
   isBye: boolean
+  /**
+   * One of the two players is withdrawn, so the match is not scored and needs
+   * no result (an unplayed one shows as "spielfrei" for the opponent).
+   */
+  voided: boolean
   reported: boolean
   reportedAt: string | null
 }
@@ -177,6 +212,8 @@ export interface TournamentDetail {
   description: string | null
   status: TournamentStatus
   pairingSystem: PairingSystem
+  scoring: ScoringSystem
+  byeScoring: ByeScoring
   plannedRounds: number | null
   format: TournamentFormatRef | null
   organizerName: string
@@ -205,13 +242,14 @@ export interface TournamentDetail {
 // Codes the API returns in `data.code`; the client shows `errors.api.<code>`.
 export const TOURNAMENT_ERROR_CODES = [
   'invalid_body', 'invalid_name', 'invalid_description', 'invalid_pairing_system',
-  'invalid_planned_rounds', 'unknown_format', 'invalid_participant', 'user_not_found',
+  'invalid_scoring', 'invalid_bye_scoring', 'invalid_planned_rounds', 'unknown_format', 'invalid_participant', 'user_not_found',
   'unknown_deck', 'empty_deck', 'invalid_result', 'invalid_swap',
   'organizer_only', 'foreign_deck_owner',
   'not_enough_participants', 'too_many_participants', 'participant_exists',
   'registration_closed', 'tournament_started', 'tournament_finished', 'invalid_status',
   'round_not_complete', 'round_completed', 'results_missing', 'results_reported',
   'planned_rounds_reached', 'bye_not_editable', 'no_rounds',
+  'draws_not_allowed', 'match_voided', 'pairings_fixed',
 ] as const
 export type TournamentErrorCode = typeof TOURNAMENT_ERROR_CODES[number]
 
