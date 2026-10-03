@@ -970,6 +970,7 @@ const loadErrorDescription = computed(() => (error.value ? apiError(error.value,
             <DecksDeckExportMenu
               :name="deck.name"
               :sections="deck.sections"
+              :cover-card-id="deck.cover?.catalogCardId ?? null"
             />
             <UDropdownMenu :items="deckMenuItems">
               <UButton

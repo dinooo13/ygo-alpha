@@ -74,6 +74,7 @@ useHead({
           <DecksDeckExportMenu
             :name="data.deck.name"
             :sections="data.sections"
+            :cover-card-id="data.deck.coverCardId ?? null"
           />
           <UButton
             v-if="data.isOwner"

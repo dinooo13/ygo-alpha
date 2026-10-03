@@ -1196,11 +1196,18 @@ describe('pickDeckCover', () => {
 // POST /api/decks takes the format right away (#148).
 describe('validateDeckCreateInput', () => {
   it('reads format_id or formatId, and null or an empty string as no format', () => {
-    expect(validateDeckCreateInput({ name: 'Deck', format_id: 'unlimited' })).toEqual({ name: 'Deck', description: null, formatId: 'unlimited' })
+    expect(validateDeckCreateInput({ name: 'Deck', format_id: 'unlimited' })).toEqual({ name: 'Deck', description: null, formatId: 'unlimited', coverCardId: null })
     expect(validateDeckCreateInput({ name: 'Deck', formatId: 'goat' }).formatId).toBe('goat')
     expect(validateDeckCreateInput({ name: 'Deck', format_id: null }).formatId).toBeNull()
     expect(validateDeckCreateInput({ name: 'Deck', formatId: '' }).formatId).toBeNull()
     expect(validateDeckCreateInput({ name: 'Deck' }).formatId).toBeNull()
+  })
+
+  it('reads cover_card_id or coverCardId', () => {
+    expect(validateDeckCreateInput({ name: 'Deck', cover_card_id: 46986414 }).coverCardId).toBe(46986414)
+    expect(validateDeckCreateInput({ name: 'Deck', coverCardId: '46986414' }).coverCardId).toBe(46986414)
+    expect(validateDeckCreateInput({ name: 'Deck', cover_card_id: null }).coverCardId).toBeNull()
+    expect(() => validateDeckCreateInput({ name: 'Deck', cover_card_id: 'x' })).toThrow(expect.objectContaining({ statusCode: 400 }))
   })
 
   it('400s for a format id that is not a string, and still checks the name', () => {

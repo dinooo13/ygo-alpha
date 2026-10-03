@@ -5,13 +5,15 @@
  * only hands the result to the clipboard or the browser. Used by the deck
  * editor and the shared deck view, so whoever can see a deck can export it.
  */
-import { deckPasscodes, deckRecipeRows, encodeOmegaCode, encodeRecipe, encodeYdk, encodeYdke, ydkFileName } from '~~/shared/decklist'
+import { deckPasscodes, deckRecipeRows, encodeOmegaCode, encodeRecipe, encodeYdk, encodeYdke, isPasscode, ydkFileName } from '~~/shared/decklist'
 import type { ExportCardRow } from '~~/shared/decklist'
 import type { DeckSection } from '~~/shared/deck-sections'
 
 const props = defineProps<{
   name: string
   sections: Record<DeckSection, ExportCardRow[]>
+  /** The deck's effective cover (ADR 0012); the Omega code carries it. */
+  coverCardId?: number | null
 }>()
 
 const { t } = useI18n()
@@ -62,7 +64,8 @@ async function copyRecipe() {
 async function copyOmega() {
   const { passcodes, skipped } = deckPasscodes(props.sections)
   try {
-    await copy(await encodeOmegaCode(passcodes), 'decks.export.toast.omega')
+    const cover = isPasscode(props.coverCardId) ? props.coverCardId : null
+    await copy(await encodeOmegaCode(passcodes, cover), 'decks.export.toast.omega')
   }
   catch {
     toast.add({ title: t('decks.export.errors.omegaFailed'), color: 'error' })

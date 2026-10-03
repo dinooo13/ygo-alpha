@@ -248,7 +248,7 @@ the four formats players exchange decks in (`shared/decklist.ts`, the reader is
 | Format | Shape |
 |--------|-------|
 | `ydke://` | `ydke://<main>!<extra>!<side>!`, each part base64 (standard or URL-safe) of uint32 LE passcodes, one per copy |
-| YGO Omega deck code | base64 of a raw-deflated payload: `uint8` Main + Extra count, `uint8` Side count, then the uint32 LE passcodes (Main and Extra mixed, then Side); current exports append the cover card's passcode, which the import ignores |
+| YGO Omega deck code | base64 of a raw-deflated payload: `uint8` Main + Extra count, `uint8` Side count, then the uint32 LE passcodes (Main and Extra mixed, then Side); current exports append the deck's cover card (import and export carry it as the deck's cover, ADR 0012) |
 | YDK | `#created by …`, `#main`, `#extra`, `!side`, one passcode per line and copy (7-digit passcodes lose their leading zero) |
 | Text recipe | Omega's "Recipe": `Monster` / `Spell` / `Trap` / `Extra` / `Side` headers (English or German, also `Main Deck:` style) and `3 Name` lines; headerless lists work too |
 

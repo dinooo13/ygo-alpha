@@ -117,7 +117,8 @@ export interface SharedDeckCardRow {
 
 export interface SharedDeckView {
   owner: PublicProfileSummary
-  deck: { id: string, name: string, description: string | null, updatedAt: string }
+  /** `coverCardId`: the effective cover (ADR 0012), carried by the Omega code export. */
+  deck: { id: string, name: string, description: string | null, updatedAt: string, coverCardId: number | null }
   sections: Record<DeckSection, SharedDeckCardRow[]>
   counts: { main: number, extra: number, side: number, total: number }
   limits: { mainMin: number, mainMax: number, extraMax: number, sideMax: number, maxCopies: number }
