@@ -203,6 +203,16 @@ Product outcome:
 
 Users can build decks that reflect their real collection, not just the full card catalog.
 
+Tester-Feedback Sept 2026:
+
+- [x] Deck import: "Deck importieren" on the deck list takes a pasted YDK, `ydke://` link, YGO Omega
+  deck code or text recipe, or a `.ydk` file; a review step groups the cards by Main / Extra / Side
+  (the quick-capture matching, open lines must be resolved or removed) before the deck is created.
+- [x] Deck export: the deck editor and the shared deck view export a YDK file, a `ydke://` link, an
+  Omega deck code or an Omega-style text recipe.
+- [x] Quick capture reads deck lists and no longer turns header lines ("Monster", "Zauber", "#main",
+  "Extra Deck") into card rows; equal entries are merged before the 50-line cap.
+
 ### Phase 4: Rule Formats and Deck Validation
 
 Goal: Support flexible deck legality checks for official and custom formats.
@@ -222,7 +232,7 @@ Product outcome:
 
 Users can build decks for specific rule environments and immediately see whether a deck is legal.
 
-Implemented: built-in formats (TCG Advanced, OCG, GOAT, Classic Plus, Ohne Banliste) plus custom formats under
+Implemented: built-in formats (TCG Advanced, OCG, GOAT, Edison, Classic Plus, Ohne Banliste) plus custom formats under
 `/formats`, with live validation in the deckbuilder. See
 [`docs/adr/0005-rule-format-model.md`](adr/0005-rule-format-model.md).
 Card-filter ATK/DEF ranges never match a `?` stat (#140); the editor uses the shared facet
@@ -232,6 +242,12 @@ Classic Plus, a house format whose rules describe what cards do (floodgates, han
 draw, burn, revival, mass removal, protection, negation), is a built-in with its own banlist,
 generated from the card texts by a classifier subagent and reviewed; see
 [`docs/adr/0022-classic-plus-format.md`](adr/0022-classic-plus-format.md).
+
+Tester-Feedback Sept 2026:
+
+- [x] Edison (SJC Edison, April 2010) is a built-in format: the TCG Forbidden & Limited List of
+  March 2010 from the Format Library as a static list, plus a card pool up to Duelist Pack: Kaiba;
+  see [`docs/adr/0029-edison-format.md`](adr/0029-edison-format.md).
 
 ### Phase 5: AI Deck Assistance
 
