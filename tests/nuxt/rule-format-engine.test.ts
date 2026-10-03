@@ -9,6 +9,7 @@ import {
   validateRuleSet,
 } from '../../shared/rule-formats'
 import type { DeckCardEntry, Rule, ValidationCardData } from '../../shared/rule-formats'
+import { BUILTIN_FORMATS } from '../../server/utils/rule-formats'
 
 // Real cards from the E2E catalog fixture (server/db/fixtures/catalog-fixture.ts),
 // reduced to the fields the engine reads.
@@ -427,6 +428,61 @@ describe('banlist rules', () => {
   })
 })
 
+describe('Edison (ADR 0029)', () => {
+  const edison = BUILTIN_FORMATS.find(format => format.id === 'edison')!.rules.rules
+
+  // Cards of the Edison card pool's edge: Duelist Pack: Kaiba is the last
+  // legal set (2010-04-16), The Shining Darkness is not (2010-05-07).
+  const edgeCard = (id: number, tcgDate: string | null, banlistInfo: ValidationCardData['banlistInfo'] = null): ValidationCardData => ({
+    id,
+    name: `Card ${id}`,
+    type: 'Effect Monster',
+    frameType: 'effect',
+    banlistInfo,
+    tcgDate,
+    ocgDate: null,
+    setIds: [],
+  })
+  const pool = [
+    edgeCard(1, '2010-04-16'),
+    edgeCard(2, '2010-04-24'),
+    edgeCard(3, '2010-04-25'),
+    edgeCard(4, '2010-05-07'),
+    edgeCard(5, null),
+    edgeCard(6, '2005-01-01', { ban_edison: 'Forbidden' }),
+    edgeCard(7, '2005-01-01', { ban_edison: 'Limited', ban_tcg: 'Forbidden' }),
+    edgeCard(8, '2005-01-01', { ban_edison: 'Semi-Limited' }),
+    edgeCard(9, '2005-01-01', { ban_tcg: 'Forbidden', ban_goat: 'Forbidden' }),
+  ]
+  const deck = (ids: number[], quantity = 3): DeckCardEntry[] => ids.map(id => ({ catalogCardId: id, section: 'main', quantity }))
+
+  it('allows cards first released in the TCG up to and including 2010-04-24', () => {
+    const result = evaluateDeck(edison, deck([1, 2]), pool)
+
+    expect(result.cards[1]!.status).toBe('unrestricted')
+    expect(result.cards[2]!.status).toBe('unrestricted')
+  })
+
+  it('forbids newer cards (The Shining Darkness) and cards without a TCG date', () => {
+    const result = evaluateDeck(edison, deck([3, 4, 5], 1), pool)
+
+    for (const id of [3, 4, 5]) {
+      expect(result.cards[id]!.status, String(id)).toBe('forbidden')
+    }
+    expect(codes(result.issues)).toContain('card_forbidden')
+  })
+
+  it('reads the Edison list, not the current TCG or GOAT list', () => {
+    const result = evaluateDeck(edison, deck([6, 7, 8, 9]), pool)
+
+    expect(result.cards[6]!.status).toBe('forbidden')
+    expect(result.cards[7]).toMatchObject({ maxCopies: 1, status: 'limited' })
+    expect(result.cards[7]!.reasons).toContainEqual({ kind: 'banlist', source: 'edison', raw: 'Limited' })
+    expect(result.cards[8]).toMatchObject({ maxCopies: 2, status: 'semi_limited' })
+    expect(result.cards[9]!.status).toBe('unrestricted')
+  })
+})
+
 describe('filter rules', () => {
   it('restricts matching cards', () => {
     const rules: Rule[] = [{
@@ -617,7 +673,7 @@ describe('validateRuleSet', () => {
       { rules: [{ kind: 'card_status', status: 'banned', cardIds: [1] }] },
       { rules: [{ kind: 'card_status', status: 'forbidden', cardIds: [] }] },
       { rules: [{ kind: 'card_status', status: 'forbidden', cardIds: [-1] }] },
-      { rules: [{ kind: 'banlist', source: 'edison' }] },
+      { rules: [{ kind: 'banlist', source: 'march-2010' }] },
       { rules: [{ kind: 'filter', match: 'sometimes', maxCopies: 0, filter: {} }] },
       { rules: [{ kind: 'filter', match: 'matching', maxCopies: 4, filter: {} }] },
       { rules: [{ kind: 'filter', match: 'matching', maxCopies: 0, filter: { releasedBefore: '01.07.2005' } }] },

@@ -19,6 +19,7 @@ import type {
   ValidationCardData,
 } from '../../shared/rule-formats'
 import classicPlusBanlistJson from './classic-plus-banlist.json'
+import edisonBanlistJson from './edison-banlist.json'
 
 type Db = ReturnType<typeof useDb>
 
@@ -30,11 +31,19 @@ const classicPlusStatus = new Map<number, string>([
   ...classicPlusBanlist.semiLimited.map(id => [id, 'Semi-Limited'] as const),
 ])
 
+/** Edison banlist status by card id: the TCG list of March 2010, from the Format Library (ADR 0029). */
+const edisonBanlist: ClassicPlusBanlist = edisonBanlistJson
+const edisonStatus = new Map<number, string>([
+  ...edisonBanlist.forbidden.map(id => [id, 'Forbidden'] as const),
+  ...edisonBanlist.limited.map(id => [id, 'Limited'] as const),
+  ...edisonBanlist.semiLimited.map(id => [id, 'Semi-Limited'] as const),
+])
+
 /**
  * Loads the catalog data the rule engine needs for `cardIds`: card fields plus
  * the ids of the sets the card has a printing in (one extra query, not one per
- * card). The Classic Plus status isn't catalog data; it is added to
- * `banlistInfo` here, so the engine reads every banlist the same way.
+ * card). The Edison and Classic Plus statuses aren't catalog data; they are
+ * added to `banlistInfo` here, so the engine reads every banlist the same way.
  */
 export function loadCardDataForValidation(db: Db, cardIds: number[]): Map<number, ValidationCardData> {
   const uniqueIds = [...new Set(cardIds)]
@@ -65,8 +74,15 @@ export function loadCardDataForValidation(db: Db, cardIds: number[]): Map<number
     .all()
 
   for (const row of rows) {
+    const edison = edisonStatus.get(row.id)
     const classicPlus = classicPlusStatus.get(row.id)
-    const banlistInfo = classicPlus ? { ...row.banlistInfo, ban_classic_plus: classicPlus } : row.banlistInfo
+    const banlistInfo = edison || classicPlus
+      ? {
+          ...row.banlistInfo,
+          ...(edison ? { ban_edison: edison } : {}),
+          ...(classicPlus ? { ban_classic_plus: classicPlus } : {}),
+        }
+      : row.banlistInfo
     byId.set(row.id, { ...row, banlistInfo, setIds: [] })
   }
 

@@ -14,6 +14,11 @@
         "description": "Retro format as of April 2005: only cards released in the TCG up to June 2005, plus the GOAT banlist.",
         "cutoffLabel": "Only cards up to June 2005"
       },
+      "edison": {
+        "name": "Edison",
+        "description": "Retro format as of April 2010 (SJC Edison): only TCG cards released up to Duelist Pack: Kaiba (The Shining Darkness is not legal), plus the TCG Forbidden & Limited List of March 2010. The later Hidden Arsenal reprints of older cards are not modeled.",
+        "cutoffLabel": "Only cards up to Duelist Pack: Kaiba (April 2010)"
+      },
       "classic-plus": {
         "name": "Classic Plus",
         "cutoffLabel": "Rule 1: Synchro, Xyz, Pendulum and Link monsters",

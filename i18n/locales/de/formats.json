@@ -14,6 +14,11 @@
         "description": "Retro-Format auf dem Stand von April 2005: nur Karten, die bis Juni 2005 im TCG erschienen sind, plus die GOAT-Banliste.",
         "cutoffLabel": "Nur Karten bis Juni 2005"
       },
+      "edison": {
+        "name": "Edison",
+        "description": "Retro-Format auf dem Stand von April 2010 (SJC Edison): nur Karten, die im TCG bis einschließlich Duelist Pack: Kaiba erschienen sind (The Shining Darkness ist nicht erlaubt), plus die TCG-Verbots- und Beschränkungsliste von März 2010. Die späteren Hidden-Arsenal-Neuauflagen älterer Karten sind nicht abgebildet.",
+        "cutoffLabel": "Nur Karten bis Duelist Pack: Kaiba (April 2010)"
+      },
       "classic-plus": {
         "name": "Classic Plus",
         "cutoffLabel": "Regel 1: Synchro-, Xyz-, Pendel- und Linkmonster",
