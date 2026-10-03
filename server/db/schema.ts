@@ -5,7 +5,7 @@ import type { AssistantMessageMetadata, AssistantUIMessagePart } from '../../sha
 import type { RuleSet } from '../../shared/rule-formats'
 import type { AppLocale } from '../../shared/locale'
 import type { ShareResourceType, Visibility, WishlistVisibility } from '../../shared/sharing'
-import type { PairingSystem, TournamentDeckSnapshot, TournamentStatus } from '../../shared/tournaments'
+import type { ByeScoring, PairingSystem, ScoringSystem, TournamentDeckSnapshot, TournamentStatus } from '../../shared/tournaments'
 
 // Better Auth core tables (email/password only).
 // Generated to match Better Auth's expected schema for the Drizzle adapter (provider: "sqlite").
@@ -561,6 +561,12 @@ export const tournament = sqliteTable(
       .references(() => ruleFormat.id, { onDelete: 'set null' }),
     // 'swiss' | 'round_robin' (shared/tournaments.ts).
     pairingSystem: text('pairing_system').notNull().$type<PairingSystem>().default('swiss'),
+    // How a match becomes points: 'games' (3/2/1/0) | 'match' (3/0, draw 1).
+    // Fixed at registration. Tournaments that existed before ADR 0028 were
+    // backfilled with 'match' so their standings stay as they were.
+    scoring: text('scoring').notNull().$type<ScoringSystem>().default('games'),
+    // What a bye is worth: 'none' | 'win' (2:0). Backfilled with 'win'.
+    byeScoring: text('bye_scoring').notNull().$type<ByeScoring>().default('none'),
     // 'registration' | 'running' | 'finished'.
     status: text('status').notNull().$type<TournamentStatus>().default('registration'),
     // NULL until the tournament starts: resolved from the participant count
@@ -601,7 +607,12 @@ export const tournamentParticipant = sqliteTable(
     // NULL = no deck registered, or the tournament has no format.
     deckLegal: integer('deck_legal', { mode: 'boolean' }),
     deckIssueCount: integer('deck_issue_count'),
+    // Left the tournament: past results count, no further pairings.
     dropped: integer('dropped', { mode: 'boolean' }).notNull().default(false),
+    // Taken out of the standings by the organizer (ADR 0028): every match
+    // with this participant, past and future, is ignored by everyone's
+    // standings. Reversible while the tournament runs.
+    withdrawn: integer('withdrawn', { mode: 'boolean' }).notNull().default(false),
     // Registration order, renumbered to 1..n when the tournament starts.
     // Drives the round-robin circle and is the final standings tiebreak.
     seed: integer('seed').notNull(),
@@ -652,7 +663,8 @@ export const tournamentMatch = sqliteTable(
     participantAId: text('participant_a_id')
       .notNull()
       .references(() => tournamentParticipant.id, { onDelete: 'cascade' }),
-    // NULL = bye. A bye is stored as a reported 2–0 win for A.
+    // NULL = bye, reported at creation: a 2–0 win for A under
+    // `tournament.bye_scoring = 'win'`, an empty 0–0 without a winner under 'none'.
     participantBId: text('participant_b_id')
       .references(() => tournamentParticipant.id, { onDelete: 'cascade' }),
     winnerParticipantId: text('winner_participant_id')

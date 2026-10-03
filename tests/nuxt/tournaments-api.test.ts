@@ -505,13 +505,27 @@ describe('rounds', () => {
     expect(appearsInMatch).toBe(false)
   })
 
-  it('gives exactly one bye, already reported, for an odd active field', () => {
+  it('gives exactly one bye, already reported and worth nothing by default, for an odd active field', () => {
     const detail = getTournamentDetail(db, 'user-a', id)
     const byes = detail.rounds[0]!.matches.filter(match => match.isBye)
     expect(byes).toHaveLength(1)
     expect(byes[0]!.reported).toBe(true)
-    expect(byes[0]!.gamesA).toBe(2)
+    expect(byes[0]!.gamesA).toBe(0)
     expect(byes[0]!.gamesB).toBe(0)
+    expect(byes[0]!.winnerParticipantId).toBeNull()
+    const byeRow = detail.standings.find(row => row.participantId === byes[0]!.participantAId)!
+    expect(byeRow).toMatchObject({ points: 0, matchesPlayed: 0, byes: 1 })
+  })
+
+  it('scores a bye as a 2:0 win when the tournament uses byeScoring win', () => {
+    const winId = createTournament(db, 'user-a', validateTournamentInput({ name: 'Freilos zählt', includeSelf: false, byeScoring: 'win' })).id
+    for (const name of ['Alice', 'Bob', 'Carla']) {
+      addParticipant(db, 'user-a', winId, validateParticipantInput({ name }))
+    }
+    const detail = startTournament(db, 'user-a', winId)
+    const bye = detail.rounds[0]!.matches.find(match => match.isBye)!
+    expect(bye).toMatchObject({ gamesA: 2, gamesB: 0, winnerParticipantId: bye.participantAId })
+    expect(detail.standings.find(row => row.participantId === bye.participantAId)).toMatchObject({ points: 3, matchesPlayed: 1 })
   })
 })
 
@@ -550,13 +564,20 @@ describe('match results', () => {
     expect(updated.winnerParticipantId).toBe(match.participantBId)
   })
 
-  it('normalizes a draw result to 1-1', () => {
-    detail = reportMatchResult(db, 'user-a', id, firstMatch().id, { draw: true })
+  it('rejects a draw, however it is entered', () => {
+    for (const body of [{ draw: true }, { gamesA: 1, gamesB: 1 }, { gamesA: 0, gamesB: 0 }]) {
+      expect(() => reportMatchResult(db, 'user-a', id, firstMatch().id, body))
+        .toThrow(expect.objectContaining({ statusCode: 400, data: { code: 'draws_not_allowed' } }))
+    }
+    expect(getTournamentDetail(db, 'user-a', id).currentRound!.matches[0]!.reported).toBe(false)
+  })
+
+  it('stores a 1:2 as a win for B and ranks the loser above a 0:2 under games scoring', () => {
+    detail = reportMatchResult(db, 'user-a', id, firstMatch().id, { gamesA: 1, gamesB: 2 })
     const match = detail.currentRound!.matches[0]!
-    expect(match.gamesA).toBe(1)
-    expect(match.gamesB).toBe(1)
-    expect(match.isDraw).toBe(true)
-    expect(match.winnerParticipantId).toBeNull()
+    expect(match.winnerParticipantId).toBe(match.participantBId)
+    expect(match.isDraw).toBe(false)
+    expect(detail.standings.map(row => row.points)).toEqual([2, 1])
   })
 
   it('rejects out-of-range games', () => {
@@ -863,5 +884,182 @@ describe('deck snapshot visibility', () => {
 
     detail = getTournamentDetail(db, 'user-b', id)
     expect(organizerRow().deckSnapshot).not.toBeNull()
+  })
+})
+
+describe('scoring settings', () => {
+  let db: TestDb
+
+  beforeEach(() => {
+    db = createTestDb()
+    seedUsersAndCatalog(db)
+  })
+
+  it('defaults new tournaments to games scoring and a bye worth nothing, for both pairing systems', () => {
+    for (const pairingSystem of ['swiss', 'round_robin']) {
+      const detail = createTournament(db, 'user-a', validateTournamentInput({ name: pairingSystem, pairingSystem }))
+      expect(detail).toMatchObject({ scoring: 'games', byeScoring: 'none' })
+    }
+  })
+
+  it('rejects unknown scoring values', () => {
+    expect(() => validateTournamentInput({ name: 'x', scoring: 'elo' }))
+      .toThrow(expect.objectContaining({ data: { code: 'invalid_scoring' } }))
+    expect(() => validateTournamentInput({ name: 'x', byeScoring: 'half' }))
+      .toThrow(expect.objectContaining({ data: { code: 'invalid_bye_scoring' } }))
+  })
+
+  it('lets the organizer change them during registration only', () => {
+    const id = createTournament(db, 'user-a', validateTournamentInput({ name: 'Wertung' })).id
+    addParticipant(db, 'user-a', id, validateParticipantInput({ name: 'Bob' }))
+
+    const updated = updateTournament(db, 'user-a', id, { scoring: 'match', byeScoring: 'win' })
+    expect(updated).toMatchObject({ scoring: 'match', byeScoring: 'win' })
+
+    startTournament(db, 'user-a', id)
+    expect(() => updateTournament(db, 'user-a', id, { scoring: 'games' }))
+      .toThrow(expect.objectContaining({ statusCode: 409, data: { code: 'tournament_started' } }))
+    expect(() => updateTournament(db, 'user-a', id, { byeScoring: 'none' }))
+      .toThrow(expect.objectContaining({ statusCode: 409, data: { code: 'tournament_started' } }))
+  })
+
+  it('keeps classic 3/0 scoring under scoring match', () => {
+    const id = createTournament(db, 'user-a', validateTournamentInput({ name: 'Klassisch', includeSelf: false, scoring: 'match' })).id
+    addParticipant(db, 'user-a', id, validateParticipantInput({ name: 'Alice' }))
+    addParticipant(db, 'user-a', id, validateParticipantInput({ name: 'Bob' }))
+    let detail = startTournament(db, 'user-a', id)
+    detail = reportMatchResult(db, 'user-a', id, detail.currentRound!.matches[0]!.id, { gamesA: 1, gamesB: 2 })
+    expect(detail.standings.map(row => row.points)).toEqual([3, 0])
+  })
+})
+
+describe('round robin league', () => {
+  let db: TestDb
+  let id: string
+
+  function playRound(detail: TournamentDetail, games: { gamesA: number, gamesB: number }) {
+    let latest = detail
+    for (const match of detail.currentRound!.matches) {
+      if (!match.isBye && !match.voided) {
+        latest = reportMatchResult(db, 'user-a', id, match.id, games)
+      }
+    }
+    return completeRound(db, 'user-a', id, latest.currentRound!.id)
+  }
+
+  beforeEach(() => {
+    db = createTestDb()
+    seedUsersAndCatalog(db)
+    id = createTournament(db, 'user-a', validateTournamentInput({
+      name: 'Liga',
+      includeSelf: false,
+      pairingSystem: 'round_robin',
+    })).id
+    for (const name of ['Alice', 'Bob', 'Carla', 'Dave', 'Erin']) {
+      addParticipant(db, 'user-a', id, validateParticipantInput({ name }))
+    }
+  })
+
+  it('plays a full odd field: five matchdays, one spielfrei each, nobody gets bye points', () => {
+    let detail = startTournament(db, 'user-a', id)
+    expect(detail.plannedRounds).toBe(5)
+    expect(detail.canEditPairings).toBe(false)
+
+    const pairs = new Set<string>()
+    const byeCounts = new Map<string, number>()
+    for (let round = 1; round <= 5; round++) {
+      expect(detail.currentRound!.matches.filter(match => match.isBye)).toHaveLength(1)
+      for (const match of detail.currentRound!.matches) {
+        if (match.isBye) {
+          byeCounts.set(match.participantAId, (byeCounts.get(match.participantAId) ?? 0) + 1)
+        }
+        else {
+          pairs.add([match.participantAId, match.participantBId!].sort().join('|'))
+        }
+      }
+      detail = playRound(detail, { gamesA: 2, gamesB: 1 })
+      if (round < 5) {
+        detail = createNextRound(db, 'user-a', id)
+      }
+    }
+
+    expect(pairs.size).toBe(10)
+    expect([...byeCounts.values()]).toEqual([1, 1, 1, 1, 1])
+    expect(detail.standings.every(row => row.byes === 1 && row.matchesPlayed === 4)).toBe(true)
+    // Ten decided matches, each a 2:1 (2 + 1 points) under games scoring.
+    expect(detail.standings.reduce((sum, row) => sum + row.points, 0)).toBe(10 * 3)
+    expect(detail.canFinish).toBe(true)
+    expect(finishTournament(db, 'user-a', id).status).toBe('finished')
+  })
+
+  it('rejects pairing swaps', () => {
+    const detail = startTournament(db, 'user-a', id)
+    const [matchA, matchB] = detail.currentRound!.matches
+    expect(() => swapPairing(db, 'user-a', id, { matchAId: matchA!.id, slotA: 'a', matchBId: matchB!.id, slotB: 'a' }))
+      .toThrow(expect.objectContaining({ statusCode: 409, data: { code: 'pairings_fixed' } }))
+  })
+
+  it('withdraws a player: their matches void and uncounted, later fixtures spielfrei, reversible', () => {
+    let detail = startTournament(db, 'user-a', id)
+    // Alice has the fixed bye slot of matchday 1; Bob plays, wins, and is then
+    // withdrawn mid-round.
+    const bob = detail.participants.find(p => p.name === 'Bob')!
+    const bobMatch = detail.currentRound!.matches.find(match => !match.isBye && (match.participantAId === bob.id || match.participantBId === bob.id))!
+    detail = reportMatchResult(db, 'user-a', id, bobMatch.id, bobMatch.participantAId === bob.id ? { gamesA: 2, gamesB: 0 } : { gamesA: 0, gamesB: 2 })
+    expect(detail.standings.find(row => row.participantId === bob.id)!.points).toBe(3)
+
+    detail = updateParticipant(db, 'user-a', id, bob.id, { withdrawn: true })
+    expect(detail.participants.find(p => p.id === bob.id)!.withdrawn).toBe(true)
+    // Listed last, with nothing of his own, and his opponent loses the points from that match.
+    expect(detail.standings.at(-1)).toMatchObject({ participantId: bob.id, withdrawn: true, matchesPlayed: 0, points: 0 })
+    expect(detail.standings.slice(0, -1).every(row => !row.withdrawn && row.points === 0)).toBe(true)
+    expect(detail.currentRound!.matches.find(match => match.id === bobMatch.id)!.voided).toBe(true)
+
+    // The voided match is not scored, and the round completes without further results.
+    detail = playRound(detail, { gamesA: 2, gamesB: 0 })
+    expect(detail.rounds[0]!.status).toBe('completed')
+    expect(detail.standings.at(-1)!.participantId).toBe(bob.id)
+
+    // Later fixtures with Bob still exist, are void, and need no result.
+    detail = createNextRound(db, 'user-a', id)
+    const bobFixture = detail.currentRound!.matches.find(match => match.participantAId === bob.id || match.participantBId === bob.id)!
+    expect(bobFixture.voided).toBe(true)
+    expect(() => reportMatchResult(db, 'user-a', id, bobFixture.id, { gamesA: 2, gamesB: 0 }))
+      .toThrow(expect.objectContaining({ statusCode: 409, data: { code: 'match_voided' } }))
+    const pending = detail.currentRound!.matches.filter(match => !match.reported && !match.voided)
+    expect(detail.canCompleteRound).toBe(pending.length === 0)
+
+    // Reversible while running: the same fixture is a real match again.
+    detail = updateParticipant(db, 'user-a', id, bob.id, { withdrawn: false })
+    expect(detail.currentRound!.matches.find(match => match.id === bobFixture.id)!.voided).toBe(false)
+    expect(detail.standings.find(row => row.participantId === bob.id)).toMatchObject({ withdrawn: false, points: 3 })
+  })
+
+  it('only allows withdrawing while the tournament runs', () => {
+    const participant = getTournamentDetail(db, 'user-a', id).participants[0]!
+    expect(() => updateParticipant(db, 'user-a', id, participant.id, { withdrawn: true }))
+      .toThrow(expect.objectContaining({ statusCode: 409, data: { code: 'invalid_status' } }))
+  })
+})
+
+describe('swiss with a withdrawn player', () => {
+  it('pairs the next round without them and ignores their results', () => {
+    const db = createTestDb()
+    seedUsersAndCatalog(db)
+    const id = createTournament(db, 'user-a', validateTournamentInput({ name: 'Swiss', includeSelf: false })).id
+    for (const name of ['Alice', 'Bob', 'Carla', 'Dave']) {
+      addParticipant(db, 'user-a', id, validateParticipantInput({ name }))
+    }
+    let detail = startTournament(db, 'user-a', id)
+    detail = reportBothMatches(db, id, detail)
+    detail = completeRound(db, 'user-a', id, detail.currentRound!.id)
+
+    const [first] = detail.standings
+    detail = updateParticipant(db, 'user-a', id, first!.participantId, { withdrawn: true })
+    expect(detail.standings.at(-1)!.participantId).toBe(first!.participantId)
+
+    detail = createNextRound(db, 'user-a', id)
+    const playing = detail.currentRound!.matches.flatMap(match => [match.participantAId, match.participantBId])
+    expect(playing).not.toContain(first!.participantId)
   })
 })

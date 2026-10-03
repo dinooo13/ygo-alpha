@@ -14,6 +14,7 @@ function p(id: string, seed: number, over: Partial<PairingParticipant> = {}): Pa
     points: 0,
     tiebreak: 0,
     dropped: false,
+    withdrawn: false,
     opponentIds: [],
     hadBye: false,
     ...over,
@@ -52,6 +53,19 @@ describe('pairSwissRound', () => {
     expect(result).toEqual([
       { tableNumber: 1, participantAId: 'p1', participantBId: 'p2' },
       { tableNumber: 2, participantAId: 'p3', participantBId: 'p4' },
+    ])
+  })
+
+  it('excludes withdrawn players from Swiss pairings, like dropped ones', () => {
+    const result = pairSwissRound([
+      p('p1', 1),
+      p('p2', 2, { withdrawn: true }),
+      p('p3', 3),
+      p('p4', 4),
+    ])
+    expect(result).toEqual([
+      { tableNumber: 1, participantAId: 'p1', participantBId: 'p3' },
+      { tableNumber: 2, participantAId: 'p4', participantBId: null },
     ])
   })
 
@@ -185,6 +199,16 @@ describe('pairRoundRobinRound', () => {
     expect(result).toEqual([
       { tableNumber: 1, participantAId: 'b', participantBId: 'c' },
     ])
+  })
+
+  it('keeps a withdrawn participant in the fixed schedule instead of rearranging it', () => {
+    const participants = [p('a', 1), p('b', 2, { withdrawn: true }), p('c', 3), p('d', 4)]
+    // Same fixtures as without the withdrawal: b still meets c in round 1,
+    // the standings and the UI treat that match as void.
+    expect(pairRoundRobinRound(participants, 1)).toEqual(pairRoundRobinRound(
+      [p('a', 1), p('b', 2), p('c', 3), p('d', 4)],
+      1,
+    ))
   })
 
   it('returns an empty pairing set beyond the schedule length', () => {

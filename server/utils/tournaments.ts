@@ -28,10 +28,12 @@ import { requireAssignableFormat } from './rule-formats'
 import { pairRound } from '../../shared/tournament-pairing'
 import type { Pairing, PairingParticipant } from '../../shared/tournament-pairing'
 import { computeStandings } from '../../shared/tournament-standings'
-import type { StandingsMatch, StandingsParticipant } from '../../shared/tournament-standings'
+import type { StandingsMatch, StandingsOptions, StandingsParticipant } from '../../shared/tournament-standings'
 import {
   BYE_GAMES,
-  DEFAULT_DRAW_GAMES,
+  BYE_SCORINGS,
+  DEFAULT_BYE_SCORING,
+  DEFAULT_SCORING,
   DEFAULT_WIN_GAMES,
   MAX_GAMES_PER_MATCH,
   MAX_PARTICIPANTS,
@@ -41,13 +43,16 @@ import {
   PAIRING_SYSTEMS,
   PARTICIPANT_NAME_MAX_LENGTH,
   roundRobinRoundCount,
+  SCORING_SYSTEMS,
   swissRoundCount,
   TOURNAMENT_DESCRIPTION_MAX_LENGTH,
   TOURNAMENT_NAME_MAX_LENGTH,
   TOURNAMENT_STATUSES,
 } from '../../shared/tournaments'
 import type {
+  ByeScoring,
   PairingSystem,
+  ScoringSystem,
   TournamentDeckSnapshot,
   TournamentDeckSnapshotCard,
   TournamentDetail,
@@ -183,6 +188,8 @@ export interface TournamentInput {
   description: string | null
   formatId: string | null
   pairingSystem: PairingSystem
+  scoring: ScoringSystem
+  byeScoring: ByeScoring
   plannedRounds: number | null
   includeSelf: boolean
 }
@@ -224,6 +231,26 @@ function normalizePairingSystem(raw: unknown): PairingSystem {
   return raw as PairingSystem
 }
 
+function normalizeScoring(raw: unknown): ScoringSystem {
+  if (raw === undefined) {
+    return DEFAULT_SCORING
+  }
+  if (typeof raw !== 'string' || !(SCORING_SYSTEMS as readonly string[]).includes(raw)) {
+    badRequest('invalid_scoring', 'Unknown scoring system')
+  }
+  return raw as ScoringSystem
+}
+
+function normalizeByeScoring(raw: unknown): ByeScoring {
+  if (raw === undefined) {
+    return DEFAULT_BYE_SCORING
+  }
+  if (typeof raw !== 'string' || !(BYE_SCORINGS as readonly string[]).includes(raw)) {
+    badRequest('invalid_bye_scoring', 'Unknown bye scoring')
+  }
+  return raw as ByeScoring
+}
+
 function normalizePlannedRounds(raw: unknown): number | null {
   if (raw === undefined || raw === null || raw === '') {
     return null
@@ -254,6 +281,8 @@ export function validateTournamentInput(body: unknown): TournamentInput {
     description: normalizeDescription(body.description),
     formatId: normalizeFormatId(body.formatId),
     pairingSystem: normalizePairingSystem(body.pairingSystem),
+    scoring: normalizeScoring(body.scoring),
+    byeScoring: normalizeByeScoring(body.byeScoring),
     plannedRounds: normalizePlannedRounds(body.plannedRounds),
     includeSelf: body.includeSelf !== false,
   }
@@ -264,6 +293,8 @@ export interface TournamentUpdateInput {
   description?: string | null
   formatId?: string | null
   pairingSystem?: PairingSystem
+  scoring?: ScoringSystem
+  byeScoring?: ByeScoring
   plannedRounds?: number | null
 }
 
@@ -292,6 +323,12 @@ export function validateTournamentUpdateInput(body: unknown): TournamentUpdateIn
   }
   if (body.pairingSystem !== undefined) {
     patch.pairingSystem = normalizePairingSystem(body.pairingSystem)
+  }
+  if (body.scoring !== undefined) {
+    patch.scoring = normalizeScoring(body.scoring)
+  }
+  if (body.byeScoring !== undefined) {
+    patch.byeScoring = normalizeByeScoring(body.byeScoring)
   }
   if (body.plannedRounds !== undefined) {
     patch.plannedRounds = normalizePlannedRounds(body.plannedRounds)
@@ -325,7 +362,7 @@ export function validateParticipantInput(body: unknown): ParticipantInput {
   return { email: null, name }
 }
 
-export interface ParticipantUpdateInput { name?: string, dropped?: boolean }
+export interface ParticipantUpdateInput { name?: string, dropped?: boolean, withdrawn?: boolean }
 
 export function validateParticipantUpdateInput(body: unknown): ParticipantUpdateInput {
   if (!isRecord(body)) {
@@ -350,6 +387,12 @@ export function validateParticipantUpdateInput(body: unknown): ParticipantUpdate
     }
     patch.dropped = body.dropped
   }
+  if (body.withdrawn !== undefined) {
+    if (typeof body.withdrawn !== 'boolean') {
+      badRequest('invalid_body', 'withdrawn must be a boolean')
+    }
+    patch.withdrawn = body.withdrawn
+  }
 
   return patch
 }
@@ -369,7 +412,10 @@ export function validateDeckRegistrationInput(body: unknown): { deckId: string |
   return { deckId: raw }
 }
 
-/** Normalizes both entry styles into games (see D8). */
+/**
+ * Normalizes both entry styles into games (see D8). A match always has a
+ * winner (ADR 0028): `{ draw: true }` and equal game counts are rejected.
+ */
 export function validateMatchResultInput(body: unknown): { gamesA: number, gamesB: number } {
   if (!isRecord(body)) {
     badRequest('invalid_result', 'Result must be an object')
@@ -383,11 +429,14 @@ export function validateMatchResultInput(body: unknown): { gamesA: number, games
     if (!isValidCount(gamesA) || !isValidCount(gamesB)) {
       badRequest('invalid_result', `gamesA/gamesB must be integers 0-${MAX_GAMES_PER_MATCH}`)
     }
+    if (gamesA === gamesB) {
+      badRequest('draws_not_allowed', 'A match cannot end in a draw')
+    }
     return { gamesA, gamesB }
   }
 
   if (body.draw === true) {
-    return { gamesA: DEFAULT_DRAW_GAMES, gamesB: DEFAULT_DRAW_GAMES }
+    badRequest('draws_not_allowed', 'A match cannot end in a draw')
   }
 
   if (body.winnerParticipantId === 'a') {
@@ -545,6 +594,61 @@ function buildDeckSnapshot(
   return { snapshot, legal, issueCount }
 }
 
+// --- Standings and byes ----------------------------------------------------
+
+type ParticipantRow = typeof tournamentParticipant.$inferSelect
+type MatchRow = typeof tournamentMatch.$inferSelect
+
+function standingsOptionsOf(row: typeof tournament.$inferSelect): StandingsOptions {
+  return { scoring: row.scoring, byeScoring: row.byeScoring, pairingSystem: row.pairingSystem }
+}
+
+/** Standings are always computed on read, from the match history, never stored. */
+function computeTournamentStandings(
+  row: typeof tournament.$inferSelect,
+  participants: ParticipantRow[],
+  matches: MatchRow[],
+) {
+  const standingsParticipants: StandingsParticipant[] = participants.map(p => ({
+    id: p.id,
+    seed: p.seed,
+    dropped: p.dropped,
+    withdrawn: p.withdrawn,
+  }))
+  const standingsMatches: StandingsMatch[] = matches.map(match => ({
+    participantAId: match.participantAId,
+    participantBId: match.participantBId,
+    winnerParticipantId: match.winnerParticipantId,
+    gamesA: match.gamesA,
+    gamesB: match.gamesB,
+    isDraw: match.isDraw,
+    reported: match.reportedAt !== null,
+  }))
+  return computeStandings(standingsParticipants, standingsMatches, standingsOptionsOf(row))
+}
+
+/**
+ * A match with a withdrawn player is void (ADR 0028): it is not scored and
+ * needs no result. A bye has no second player, so it is void only when its
+ * one player is withdrawn.
+ */
+function isVoidedMatch(match: MatchRow, withdrawnIds: Set<string>): boolean {
+  return withdrawnIds.has(match.participantAId)
+    || (match.participantBId !== null && withdrawnIds.has(match.participantBId))
+}
+
+/** The stored shape of a bye: reported at once, a 2–0 win or an empty 0–0 (ADR 0028). */
+function byeMatchValues(byeScoring: ByeScoring, participantAId: string, now: Date) {
+  const scoredAsWin = byeScoring === 'win'
+  return {
+    winnerParticipantId: scoredAsWin ? participantAId : null,
+    gamesA: scoredAsWin ? BYE_GAMES : 0,
+    gamesB: 0,
+    isDraw: false,
+    reportedAt: now,
+  }
+}
+
 // --- Detail building -----------------------------------------------------
 
 function toParticipantDto(
@@ -562,6 +666,7 @@ function toParticipantDto(
     linked: participant.userId !== null,
     isSelf,
     dropped: participant.dropped,
+    withdrawn: participant.withdrawn,
     seed: participant.seed,
     // Don't hand out a deck id for a snapshot the caller cannot open (#3):
     // deckName/deckLegal/deckIssueCount stay populated (snapshot-derived),
@@ -604,6 +709,7 @@ function buildTournamentDetail(
     .all()
 
   const participantById = new Map(participants.map(p => [p.id, p]))
+  const withdrawnIds = new Set(participants.filter(p => p.withdrawn).map(p => p.id))
 
   const matchesByRound = new Map<string, typeof matches>()
   for (const match of matches) {
@@ -626,6 +732,7 @@ function buildTournamentDetail(
     gamesB: match.gamesB,
     isDraw: match.isDraw,
     isBye: match.participantBId === null,
+    voided: isVoidedMatch(match, withdrawnIds),
     reported: match.reportedAt !== null,
     reportedAt: match.reportedAt ? match.reportedAt.toISOString() : null,
   })
@@ -645,24 +752,10 @@ function buildTournamentDetail(
   const format = row.formatId ? loadTournamentFormatRef(db, row.formatId) : null
   const organizer = db.select({ name: user.name }).from(user).where(eq(user.id, row.organizerUserId)).get()
 
-  const standingsParticipants: StandingsParticipant[] = participants.map(p => ({
-    id: p.id,
-    seed: p.seed,
-    dropped: p.dropped,
-  }))
-  const standingsMatches: StandingsMatch[] = matches.map(match => ({
-    participantAId: match.participantAId,
-    participantBId: match.participantBId,
-    winnerParticipantId: match.winnerParticipantId,
-    gamesA: match.gamesA,
-    gamesB: match.gamesB,
-    isDraw: match.isDraw,
-    reported: match.reportedAt !== null,
-  }))
-  const standings: TournamentStandingRow[] = computeStandings(standingsParticipants, standingsMatches)
+  const standings: TournamentStandingRow[] = computeTournamentStandings(row, participants, matches)
     .map(standingsRow => ({ ...standingsRow, name: participantById.get(standingsRow.participantId)?.name ?? '' }))
 
-  const activeParticipantCount = participants.filter(p => !p.dropped).length
+  const activeParticipantCount = participants.filter(p => !p.dropped && !p.withdrawn).length
 
   const canStart = role === 'organizer'
     && row.status === 'registration'
@@ -678,14 +771,17 @@ function buildTournamentDetail(
 
   const canCompleteRound = role === 'organizer'
     && currentRoundDto !== null
-    && currentRoundDto.matches.every(match => match.reported)
+    && currentRoundDto.matches.every(match => match.reported || match.voided)
 
   const canFinish = role === 'organizer'
     && row.status === 'running'
     && rounds.length > 0
     && lastRound!.status === 'completed'
 
+  // A round-robin schedule is fixed by the circle method (ADR 0028): moving a
+  // player to another table would break "everyone plays everyone once".
   const canEditPairings = role === 'organizer'
+    && row.pairingSystem === 'swiss'
     && currentRoundDto !== null
     && currentRoundDto.matches.every(match => match.isBye || !match.reported)
 
@@ -695,6 +791,8 @@ function buildTournamentDetail(
     description: row.description,
     status: row.status,
     pairingSystem: row.pairingSystem,
+    scoring: row.scoring,
+    byeScoring: row.byeScoring,
     plannedRounds: row.plannedRounds,
     format,
     organizerName: organizer?.name ?? '',
@@ -721,6 +819,7 @@ function createRoundInTransaction(
   txDb: Db,
   tournamentId: string,
   system: PairingSystem,
+  byeScoring: ByeScoring,
   roundNumber: number,
   participants: PairingParticipant[],
   now: Date,
@@ -749,11 +848,9 @@ function createRoundInTransaction(
       tableNumber: pairing.tableNumber,
       participantAId: pairing.participantAId,
       participantBId: pairing.participantBId,
-      winnerParticipantId: isBye ? pairing.participantAId : null,
-      gamesA: isBye ? BYE_GAMES : 0,
-      gamesB: 0,
-      isDraw: false,
-      reportedAt: isBye ? now : null,
+      ...(isBye
+        ? byeMatchValues(byeScoring, pairing.participantAId, now)
+        : { winnerParticipantId: null, gamesA: 0, gamesB: 0, isDraw: false, reportedAt: null }),
     }
   })).run()
 
@@ -893,6 +990,8 @@ export function createTournament(db: Db, userId: string, input: TournamentInput)
       description: input.description,
       formatId: input.formatId,
       pairingSystem: input.pairingSystem,
+      scoring: input.scoring,
+      byeScoring: input.byeScoring,
       status: 'registration',
       plannedRounds: input.plannedRounds,
       createdAt: now,
@@ -923,6 +1022,8 @@ export function updateTournament(db: Db, userId: string, id: string, patch: Tour
     || patch.description !== undefined
     || patch.formatId !== undefined
     || patch.pairingSystem !== undefined
+    || patch.scoring !== undefined
+    || patch.byeScoring !== undefined
     || patch.plannedRounds !== undefined
 
   if (!touchesAnything) {
@@ -933,7 +1034,10 @@ export function updateTournament(db: Db, userId: string, id: string, patch: Tour
     conflict('tournament_finished', 'Tournament is finished')
   }
 
-  if ((patch.formatId !== undefined || patch.pairingSystem !== undefined) && row.status !== 'registration') {
+  // Changing how points are awarded mid-tournament would silently re-rank
+  // every result already entered, so scoring is fixed once it starts.
+  if ((patch.formatId !== undefined || patch.pairingSystem !== undefined
+    || patch.scoring !== undefined || patch.byeScoring !== undefined) && row.status !== 'registration') {
     conflict('tournament_started', 'Tournament has already started')
   }
 
@@ -962,6 +1066,8 @@ export function updateTournament(db: Db, userId: string, id: string, patch: Tour
     description: patch.description !== undefined ? patch.description : row.description,
     formatId: patch.formatId !== undefined ? patch.formatId : row.formatId,
     pairingSystem: patch.pairingSystem ?? row.pairingSystem,
+    scoring: patch.scoring ?? row.scoring,
+    byeScoring: patch.byeScoring ?? row.byeScoring,
     plannedRounds: patch.plannedRounds !== undefined ? patch.plannedRounds : row.plannedRounds,
     updatedAt: new Date(),
   }).where(eq(tournament.id, id)).run()
@@ -1079,13 +1185,14 @@ export function updateParticipant(
       notFound()
     }
 
-    if (patch.dropped !== undefined && row.status !== 'running') {
-      conflict('invalid_status', 'A participant can only drop while the tournament is running')
+    if ((patch.dropped !== undefined || patch.withdrawn !== undefined) && row.status !== 'running') {
+      conflict('invalid_status', 'A participant can only drop or be withdrawn while the tournament is running')
     }
 
     txDb.update(tournamentParticipant).set({
       name: patch.name ?? participant.name,
       dropped: patch.dropped ?? participant.dropped,
+      withdrawn: patch.withdrawn ?? participant.withdrawn,
       updatedAt: now,
     }).where(eq(tournamentParticipant.id, participantId)).run()
 
@@ -1238,11 +1345,12 @@ export function startTournament(db: Db, userId: string, id: string): TournamentD
       points: 0,
       tiebreak: 0,
       dropped: participant.dropped,
+      withdrawn: participant.withdrawn,
       opponentIds: [],
       hadBye: false,
     }))
 
-    createRoundInTransaction(txDb, id, row.pairingSystem, 1, pairingParticipants, now)
+    createRoundInTransaction(txDb, id, row.pairingSystem, row.byeScoring, 1, pairingParticipants, now)
   })
 
   return getTournamentDetail(db, userId, id)
@@ -1272,7 +1380,7 @@ export function createNextRound(db: Db, userId: string, id: string): TournamentD
     .where(eq(tournamentParticipant.tournamentId, id))
     .orderBy(asc(tournamentParticipant.seed))
     .all()
-  const activeCount = participants.filter(p => !p.dropped).length
+  const activeCount = participants.filter(p => !p.dropped && !p.withdrawn).length
   if (activeCount < 2) {
     conflict('not_enough_participants', 'Not enough active participants', { min: MIN_PARTICIPANTS_TO_START })
   }
@@ -1283,18 +1391,7 @@ export function createNextRound(db: Db, userId: string, id: string): TournamentD
     .where(eq(tournamentMatch.tournamentId, id))
     .all()
 
-  const standingsRows = computeStandings(
-    participants.map(p => ({ id: p.id, seed: p.seed, dropped: p.dropped })),
-    matches.map(match => ({
-      participantAId: match.participantAId,
-      participantBId: match.participantBId,
-      winnerParticipantId: match.winnerParticipantId,
-      gamesA: match.gamesA,
-      gamesB: match.gamesB,
-      isDraw: match.isDraw,
-      reported: match.reportedAt !== null,
-    })),
-  )
+  const standingsRows = computeTournamentStandings(row, participants, matches)
   const pointsById = new Map(standingsRows.map(row2 => [row2.participantId, row2.points]))
   const tiebreakById = new Map(standingsRows.map(row2 => [row2.participantId, row2.opponentMatchWinRate]))
 
@@ -1318,6 +1415,7 @@ export function createNextRound(db: Db, userId: string, id: string): TournamentD
     points: pointsById.get(p.id) ?? 0,
     tiebreak: tiebreakById.get(p.id) ?? 0,
     dropped: p.dropped,
+    withdrawn: p.withdrawn,
     opponentIds: opponentIdsById.get(p.id) ?? [],
     hadBye: hadByeById.get(p.id) ?? false,
   }))
@@ -1325,10 +1423,19 @@ export function createNextRound(db: Db, userId: string, id: string): TournamentD
   const now = new Date()
   db.transaction((tx) => {
     const txDb = tx as unknown as Db
-    createRoundInTransaction(txDb, id, row.pairingSystem, rounds.length + 1, pairingParticipants, now)
+    createRoundInTransaction(txDb, id, row.pairingSystem, row.byeScoring, rounds.length + 1, pairingParticipants, now)
   })
 
   return getTournamentDetail(db, userId, id)
+}
+
+function loadWithdrawnIds(db: Db, tournamentId: string): Set<string> {
+  const rows = db
+    .select({ id: tournamentParticipant.id })
+    .from(tournamentParticipant)
+    .where(and(eq(tournamentParticipant.tournamentId, tournamentId), eq(tournamentParticipant.withdrawn, true)))
+    .all()
+  return new Set(rows.map(row => row.id))
 }
 
 export function reportMatchResult(
@@ -1360,15 +1467,16 @@ export function reportMatchResult(
     conflict('bye_not_editable', 'A bye has no result to edit')
   }
 
+  const withdrawnIds = loadWithdrawnIds(db, id)
+  if (isVoidedMatch(match, withdrawnIds)) {
+    conflict('match_voided', 'A match with a withdrawn participant is not scored')
+  }
+
   const normalizedBody = normalizeMatchResultBody(body, match.participantAId, match.participantBId)
   const { gamesA, gamesB } = validateMatchResultInput(normalizedBody)
 
-  const winnerParticipantId = gamesA > gamesB
-    ? match.participantAId
-    : gamesB > gamesA
-      ? match.participantBId
-      : null
-  const isDraw = gamesA === gamesB
+  // validateMatchResultInput guarantees gamesA !== gamesB: no draws (ADR 0028).
+  const winnerParticipantId = gamesA > gamesB ? match.participantAId : match.participantBId
 
   const now = new Date()
   db.transaction((tx) => {
@@ -1378,7 +1486,7 @@ export function reportMatchResult(
       gamesA,
       gamesB,
       winnerParticipantId,
-      isDraw,
+      isDraw: false,
       reportedAt: now,
     }).where(eq(tournamentMatch.id, matchId)).run()
 
@@ -1389,7 +1497,11 @@ export function reportMatchResult(
 }
 
 export function swapPairing(db: Db, userId: string, id: string, input: PairingSwapInput): TournamentDetail {
-  requireOrganizerTournament(db, userId, id)
+  const { row } = requireOrganizerTournament(db, userId, id)
+
+  if (row.pairingSystem === 'round_robin') {
+    conflict('pairings_fixed', 'Round-robin pairings follow a fixed schedule')
+  }
 
   const rounds = db
     .select()
@@ -1464,13 +1576,10 @@ export function swapPairing(db: Db, userId: string, id: string, input: PairingSw
     for (const matchId of new Set([matchA.id, matchB.id])) {
       const current = txDb.select().from(tournamentMatch).where(eq(tournamentMatch.id, matchId)).get()!
       if (current.participantBId === null) {
-        txDb.update(tournamentMatch).set({
-          winnerParticipantId: current.participantAId,
-          gamesA: BYE_GAMES,
-          gamesB: 0,
-          isDraw: false,
-          reportedAt: now,
-        }).where(eq(tournamentMatch.id, matchId)).run()
+        txDb.update(tournamentMatch)
+          .set(byeMatchValues(row.byeScoring, current.participantAId, now))
+          .where(eq(tournamentMatch.id, matchId))
+          .run()
       }
       else {
         txDb.update(tournamentMatch).set({
@@ -1505,7 +1614,8 @@ export function completeRound(db: Db, userId: string, id: string, roundId: strin
   }
 
   const matches = db.select().from(tournamentMatch).where(eq(tournamentMatch.roundId, roundId)).all()
-  if (matches.some(match => match.reportedAt === null)) {
+  const withdrawnIds = loadWithdrawnIds(db, id)
+  if (matches.some(match => match.reportedAt === null && !isVoidedMatch(match, withdrawnIds))) {
     conflict('results_missing', 'Results are missing for this round')
   }
 
