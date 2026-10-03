@@ -428,7 +428,7 @@ describe('banlist rules', () => {
   })
 })
 
-describe('Edison (ADR 0029)', () => {
+describe('Edison (ADR 0030)', () => {
   const edison = BUILTIN_FORMATS.find(format => format.id === 'edison')!.rules.rules
 
   // Cards of the Edison card pool's edge: Duelist Pack: Kaiba is the last

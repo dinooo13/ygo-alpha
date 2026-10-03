@@ -225,7 +225,7 @@ Rule formats decide which cards and how many copies a deck may play. They live
 under `/formats` and are split into two groups:
 
 - **Offizielle Formate** — built-in, globally available, and read-only:
-  `TCG Advanced`, `OCG`, `GOAT Format`, `Edison` ([ADR 0029](adr/0029-edison-format.md)), `Classic Plus` ([ADR 0022](adr/0022-classic-plus-format.md)), and `Ohne Banliste`. They are upserted
+  `TCG Advanced`, `OCG`, `GOAT Format`, `Edison` ([ADR 0030](adr/0030-edison-format.md)), `Classic Plus` ([ADR 0022](adr/0022-classic-plus-format.md)), and `Ohne Banliste`. They are upserted
   on every server start (`seedBuiltinFormats`, see `server/plugins/migrate.ts`),
   so improved rules ship with a deploy instead of a data migration. Anybody can
   clone a built-in ("Klonen") to get an editable copy.

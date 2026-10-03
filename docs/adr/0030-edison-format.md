@@ -1,4 +1,4 @@
-# 0029: Edison as a built-in format with a static banlist
+# 0030: Edison as a built-in format with a static banlist
 
 ## Status
 

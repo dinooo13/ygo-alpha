@@ -31,7 +31,7 @@ const classicPlusStatus = new Map<number, string>([
   ...classicPlusBanlist.semiLimited.map(id => [id, 'Semi-Limited'] as const),
 ])
 
-/** Edison banlist status by card id: the TCG list of March 2010, from the Format Library (ADR 0029). */
+/** Edison banlist status by card id: the TCG list of March 2010, from the Format Library (ADR 0030). */
 const edisonBanlist: ClassicPlusBanlist = edisonBanlistJson
 const edisonStatus = new Map<number, string>([
   ...edisonBanlist.forbidden.map(id => [id, 'Forbidden'] as const),
