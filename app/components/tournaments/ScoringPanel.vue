@@ -2,7 +2,7 @@
 import { BYE_SCORINGS, SCORING_SYSTEMS } from '~~/shared/tournaments'
 import type { ByeScoring, ScoringSystem, TournamentDetail } from '~~/shared/tournaments'
 
-// How points are awarded (ADR 0028). Editable by the organizer until the
+// How points are awarded (ADR 0031). Editable by the organizer until the
 // tournament starts; once results exist, changing it would silently re-rank
 // them, so the server refuses (and the panel is no longer shown).
 

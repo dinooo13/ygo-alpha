@@ -1,4 +1,4 @@
--- ADR 0028: per-tournament scoring and bye scoring, and withdrawing a
+-- ADR 0031: per-tournament scoring and bye scoring, and withdrawing a
 -- participant from the standings. New tournaments get the column defaults
 -- ('games' scoring, no points for a bye); every tournament that exists now
 -- was played under the old rules, so it is backfilled to keep its standings

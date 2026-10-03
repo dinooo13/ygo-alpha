@@ -1,4 +1,4 @@
-// Pure standings computation (ADR 0008, ADR 0028). Match points under one of
+// Pure standings computation (ADR 0008, ADR 0031). Match points under one of
 // two scoring schemes, then either the Swiss tiebreakers (OMW% → GW% → OGW%)
 // or the league-table ones (game difference → head-to-head → games won).
 
@@ -39,7 +39,7 @@ export interface StandingsRow {
   matchesPlayed: number
   wins: number
   losses: number
-  /** Legacy results only: new results are never draws (ADR 0028). */
+  /** Legacy results only: new results are never draws (ADR 0031). */
   draws: number
   byes: number
   points: number
@@ -230,7 +230,7 @@ export function computeStandings(
     let pointsA = 0
     let pointsB = 0
     if (match.isDraw) {
-      // Legacy only: draws can no longer be reported (ADR 0028).
+      // Legacy only: draws can no longer be reported (ADR 0031).
       a.draws += 1
       b.draws += 1
       pointsA = POINTS_DRAW

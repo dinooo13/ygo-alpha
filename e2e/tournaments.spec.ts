@@ -404,7 +404,7 @@ test.describe('tournaments', () => {
     await page.getByLabel('Turniername').fill('Ligaturnier')
     await page.getByLabel('Paarungssystem').click()
     await page.getByRole('option', { name: 'Jeder gegen jeden' }).click()
-    // New tournaments score by games and give a bye nothing (ADR 0028).
+    // New tournaments score by games and give a bye nothing (ADR 0031).
     await expect(page.getByLabel('Punktevergabe')).toContainText('Nach Spielen')
     await expect(page.getByLabel('Spielfrei (bei ungerader Spielerzahl)')).toContainText('Keine Punkte')
     await page.getByRole('button', { name: 'Turnier anlegen' }).click()

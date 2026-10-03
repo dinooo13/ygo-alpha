@@ -116,7 +116,7 @@ function tournamentDetail(overrides: Partial<TournamentDetail> = {}): Tournament
     description: null,
     status: 'registration',
     pairingSystem: 'swiss',
-    // The fixtures model a tournament created before ADR 0028; the games-scoring
+    // The fixtures model a tournament created before ADR 0031; the games-scoring
     // and league tests below override these.
     scoring: 'match',
     byeScoring: 'win',
@@ -729,7 +729,7 @@ describe('tournament detail page — English', () => {
   })
 })
 
-describe('tournament detail page — scoring, results and league table (ADR 0028)', () => {
+describe('tournament detail page — scoring, results and league table (ADR 0031)', () => {
   const alice = participant({ id: 'p-2', name: 'Alice', isSelf: false })
 
   function runningDetail(overrides: Partial<TournamentDetail> = {}): TournamentDetail {

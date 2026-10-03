@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { TournamentRoundDto, TournamentStandingRow } from '~~/shared/tournaments'
 
-// Round-robin crosstable (ADR 0028): every pairing once, as "row's games :
+// Round-robin crosstable (ADR 0031): every pairing once, as "row's games :
 // column's games". Players are in table order; withdrawn ones are left out
 // because none of their matches counts.
 

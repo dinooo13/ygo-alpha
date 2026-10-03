@@ -6,7 +6,7 @@ function participant(id: string, seed: number, dropped = false, withdrawn = fals
   return { id, seed, dropped, withdrawn }
 }
 
-/** What every tournament created before ADR 0028 was backfilled with. */
+/** What every tournament created before ADR 0031 was backfilled with. */
 const LEGACY: StandingsOptions = { scoring: 'match', byeScoring: 'win', pairingSystem: 'swiss' }
 const GAMES_SWISS: StandingsOptions = { scoring: 'games', byeScoring: 'none', pairingSystem: 'swiss' }
 

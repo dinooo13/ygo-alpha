@@ -149,7 +149,7 @@ async function setDropped(participant: TournamentParticipantDto, dropped: boolea
 const { confirm } = useConfirm()
 
 /**
- * "Aus der Wertung nehmen" (ADR 0028): unlike dropping, this voids every
+ * "Aus der Wertung nehmen" (ADR 0031): unlike dropping, this voids every
  * match with the participant for everybody's standings — so taking someone
  * out asks first; putting them back is harmless and does not.
  */

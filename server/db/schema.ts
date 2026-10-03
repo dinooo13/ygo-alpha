@@ -562,7 +562,7 @@ export const tournament = sqliteTable(
     // 'swiss' | 'round_robin' (shared/tournaments.ts).
     pairingSystem: text('pairing_system').notNull().$type<PairingSystem>().default('swiss'),
     // How a match becomes points: 'games' (3/2/1/0) | 'match' (3/0, draw 1).
-    // Fixed at registration. Tournaments that existed before ADR 0028 were
+    // Fixed at registration. Tournaments that existed before ADR 0031 were
     // backfilled with 'match' so their standings stay as they were.
     scoring: text('scoring').notNull().$type<ScoringSystem>().default('games'),
     // What a bye is worth: 'none' | 'win' (2:0). Backfilled with 'win'.
@@ -609,7 +609,7 @@ export const tournamentParticipant = sqliteTable(
     deckIssueCount: integer('deck_issue_count'),
     // Left the tournament: past results count, no further pairings.
     dropped: integer('dropped', { mode: 'boolean' }).notNull().default(false),
-    // Taken out of the standings by the organizer (ADR 0028): every match
+    // Taken out of the standings by the organizer (ADR 0031): every match
     // with this participant, past and future, is ignored by everyone's
     // standings. Reversible while the tournament runs.
     withdrawn: integer('withdrawn', { mode: 'boolean' }).notNull().default(false),

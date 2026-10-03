@@ -13,7 +13,7 @@ export interface PairingParticipant {
   tiebreak: number
   dropped: boolean
   /**
-   * Taken out of the standings (ADR 0028). Swiss pairs them no more; round
+   * Taken out of the standings (ADR 0031). Swiss pairs them no more; round
    * robin keeps their fixed fixtures, which are simply not scored.
    */
   withdrawn: boolean
