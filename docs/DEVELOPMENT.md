@@ -199,7 +199,7 @@ Rule formats decide which cards and how many copies a deck may play. They live
 under `/formats` and are split into two groups:
 
 - **Offizielle Formate** — built-in, globally available, and read-only:
-  `TCG Advanced`, `OCG`, `GOAT Format`, `Classic Plus` ([ADR 0022](adr/0022-classic-plus-format.md)), and `Ohne Banliste`. They are upserted
+  `TCG Advanced`, `OCG`, `GOAT Format`, `Edison` ([ADR 0029](adr/0029-edison-format.md)), `Classic Plus` ([ADR 0022](adr/0022-classic-plus-format.md)), and `Ohne Banliste`. They are upserted
   on every server start (`seedBuiltinFormats`, see `server/plugins/migrate.ts`),
   so improved rules ship with a deploy instead of a data migration. Anybody can
   clone a built-in ("Klonen") to get an editable copy.
@@ -216,7 +216,7 @@ A format is a list of typed rules (max 50) stored as JSON and evaluated in code
 | `deck_size` | min/max cards in the Main, Extra, or Side Deck |
 | `copies` | default copies per card (1–10, normally 3) |
 | `card_status` | specific cards are forbidden / limited / semi-limited |
-| `banlist` | the official TCG, OCG, or GOAT banlist (`catalog_card.banlist_info`) |
+| `banlist` | the official TCG, OCG, GOAT, or Edison banlist, or Classic Plus's own |
 | `filter` | restrict all cards matching (or *not* matching) a card filter to 0–3 copies |
 
 A card filter can combine types, frame types, attributes, races, archetypes,

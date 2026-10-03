@@ -68,7 +68,7 @@ and set. Add any card to your inventory or your wishlist in one click.
 Pick a format and the rule check shows at once whether the deck is legal. Forbidden, limited and
 semi-limited cards are badged right in the list.
 
-- **Built in:** TCG Advanced, OCG, GOAT Format, Classic Plus and No banlist.
+- **Built in:** TCG Advanced, OCG, GOAT Format, Edison, Classic Plus and No banlist.
 - **Make your own house rules:** clone a format or start from scratch. Combine deck sizes, copy limits,
   an official banlist, specific banned or limited cards, and filters such as *"only cards released before
   2006"* or *"effect monsters limited to one copy"*.

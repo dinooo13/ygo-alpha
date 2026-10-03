@@ -11,6 +11,11 @@ vi.mock('../../server/utils/classic-plus-banlist.json', () => ({
   default: { forbidden: [], limited: [55144522], semiLimited: [83764719] },
 }))
 
+// Edison's list (tests/nuxt/edison-banlist.test.ts) isn't under test here.
+vi.mock('../../server/utils/edison-banlist.json', () => ({
+  default: { forbidden: [], limited: [], semiLimited: [] },
+}))
+
 function createTestDb() {
   const sqlite = new Database(':memory:')
   const db = drizzle(sqlite, { schema })

@@ -183,6 +183,22 @@ describe('built-in formats', () => {
     })
   })
 
+  it('models Edison as banlist plus a release cut-off before 2010-04-25', () => {
+    const edison = getRuleFormat(db, 'user-a', 'edison')
+
+    expect(edison.rules.rules).toContainEqual({ kind: 'banlist', source: 'edison' })
+    expect(edison.rules.rules).toContainEqual({
+      kind: 'filter',
+      match: 'not_matching',
+      // releasedBefore is strict: 2010-04-24 (SJC Edison) is still before the 25th.
+      filter: { releasedBefore: '2010-04-25', region: 'tcg' },
+      maxCopies: 0,
+      // Canonical English; the UI shows formats.builtin.edison.cutoffLabel.
+      label: 'Only cards up to Duelist Pack: Kaiba (April 2010)',
+    })
+    expect(edison.isBuiltin).toBe(true)
+  })
+
   it('models Classic Plus as deck sizes, its own banlist, and a rule 1 card-type filter', () => {
     const classicPlus = getRuleFormat(db, 'user-a', 'classic-plus')
 

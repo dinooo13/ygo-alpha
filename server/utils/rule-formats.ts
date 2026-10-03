@@ -122,6 +122,28 @@ export const BUILTIN_FORMATS: BuiltinFormatDefinition[] = [
     },
   },
   {
+    id: 'edison',
+    name: 'Edison',
+    description: 'Retro format as of April 2010 (SJC Edison): only TCG cards released up to Duelist Pack: Kaiba (The Shining Darkness is not legal), plus the TCG Forbidden & Limited List of March 2010. The later Hidden Arsenal reprints of older cards are not modeled.',
+    rules: {
+      rules: [
+        ...STANDARD_DECK_SIZES,
+        { kind: 'copies', maxCopies: 3 },
+        { kind: 'banlist', source: 'edison' },
+        {
+          kind: 'filter',
+          match: 'not_matching',
+          // `releasedBefore` is strict: a card first released in the TCG on
+          // 2010-04-24 (SJC Edison) or earlier is before the 25th.
+          filter: { releasedBefore: '2010-04-25', region: 'tcg' },
+          maxCopies: 0,
+          // Canonical English; the UI shows formats.builtin.edison.cutoffLabel.
+          label: 'Only cards up to Duelist Pack: Kaiba (April 2010)',
+        },
+      ],
+    },
+  },
+  {
     id: 'classic-plus',
     name: 'Classic Plus',
     description: 'House format on the 2005 field (no Extra Monster Zones or Pendulum Zones, one shared Field Zone; the first player does not draw): Main Deck 40–50, Extra Deck up to 10, no Side Deck. No Synchro, Xyz, Pendulum or Link; floodgates, hand traps, draw, burn, revival, mass removal, protection and negation are forbidden or limited by the Classic Plus rules. Everything else is playable at 3.',
