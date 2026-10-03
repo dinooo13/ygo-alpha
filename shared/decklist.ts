@@ -238,17 +238,22 @@ export function omegaPayload(mainAndExtra: number[], side: number[]): Uint8Array
   return bytes
 }
 
-/** The inverse of `omegaPayload`; `null` unless the counts match the length exactly. */
+/**
+ * The inverse of `omegaPayload`; `null` when the counted passcodes don't fit.
+ * Current Omega exports append a passcode after the Side Deck (the deck's
+ * cover card, outside both counts); bytes after the counted passcodes are
+ * ignored.
+ */
 export function readOmegaPayload(bytes: Uint8Array): { mainAndExtra: number[], side: number[] } | null {
   if (bytes.length < 2) {
     return null
   }
   const mainCount = bytes[0]!
   const sideCount = bytes[1]!
-  if (bytes.length !== 2 + 4 * (mainCount + sideCount)) {
+  if (bytes.length < 2 + 4 * (mainCount + sideCount)) {
     return null
   }
-  const ids = bytesToUint32s(bytes, 2)!
+  const ids = bytesToUint32s(bytes, 2, mainCount + sideCount)!
   return { mainAndExtra: ids.slice(0, mainCount), side: ids.slice(mainCount) }
 }
 

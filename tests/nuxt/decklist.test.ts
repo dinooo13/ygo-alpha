@@ -12,13 +12,17 @@ import {
   omegaPayload,
   parseSectionHeader,
   readOmegaPayload,
+  uint32sToBytes,
   ydkFileName,
 } from '../../shared/decklist'
 import type { DecklistEntry, DecklistSections } from '../../shared/decklist'
 import { parseDecklist } from '../../server/utils/decklist-parse'
 
-// A real deck code copied from YGO Omega's "Export": 43 Main + Extra cards, 10 Side cards.
+// The sample code from ungive/omega-api-decks: 43 Main + Extra cards, 10 Side cards, no trailer.
 const OMEGA_CODE = '0+a6LjWfEYbv/L/MAMIXps0AY4kjoiww/PbQdlYYFuz7zgDDKmaXWGB4zsmPjCC8uMSeGYRfys5kheHgpcuZQXj3GXs4XnDhIQscP7oGx/ll7xlguPCSLrM1cx1L/+bXjBYbk1k0uaWYg753MQcD8Ub3TWD8MGIuGIPsBNkBAA=='
+// A Cyber Dragon deck from a current Omega "Export" (tester, Oct 2026): 55 Main +
+// Extra cards, 3 Side cards, then Cyber End Dragon (01546123) as the cover card.
+const OMEGA_CODE_WITH_COVER = 'M2c2mqjLAsP2338wZt6Zz/KTNYKZaVIH8znNu0xq/wIZKnKMGaYknWSs/hjI8HpKDmNCgSDDf54Y5ifnzBlgeN0VHcbzu7VYa7V/MNqtn8P8U3MfyyTNZIbfd0QYeYztmK7WXGDeuzyfsfbbfgavAk/mYytvsUjfMGd4r/qPRXpSIuMzhi+MOn8Dmdt4brC+Vw9kEOmdz/I7LYCx8LAFS9ziA4wlhg4M/b7bmH/PMmSeHRLBLHRzAZO150nW7uniDN0cL1gafAxZBbfdZH7Snc0S9GkHS+8CJlZu85/MMAxSBwA='
 const YDKE_SAMPLE = 'ydke://o6lXBZyFNAI=!viOnAg==!7ydRAA==!'
 
 const OMEGA_RECIPE = `Monster
@@ -130,6 +134,17 @@ describe('parseDecklist: YGO Omega deck code', () => {
     expect(parsed.sections.extra).toEqual([])
     expect(copies(parsed.sections.main)).toBe(43)
     expect(copies(parsed.sections.side)).toBe(10)
+  })
+
+  it('reads a current export with the cover card after the Side Deck', () => {
+    const parsed = parseDecklist(OMEGA_CODE_WITH_COVER)
+
+    expect(parsed.format).toBe('omega')
+    expect(parsed.sections.main[0]).toEqual({ passcode: 70095154, quantity: 3, raw: '70095154' })
+    expect(copies(parsed.sections.main)).toBe(55)
+    // The cover card is not an extra copy: Cyber End Dragon is in the deck once.
+    expect(parsed.sections.main.find(entry => entry.passcode === 1546123)?.quantity).toBe(1)
+    expect(parsed.sections.side).toEqual([{ passcode: 66664203, quantity: 3, raw: '66664203' }])
   })
 
   it('tolerates whitespace around the code and a wrapped line', () => {
@@ -297,6 +312,9 @@ describe('encoders', () => {
     expect(payload).toHaveLength(2 + 4 * 4)
     expect(readOmegaPayload(payload)).toEqual({ mainAndExtra: [1, 2, 3], side: [4] })
     expect(readOmegaPayload(payload.slice(0, payload.length - 1))).toBeNull()
+    // Bytes after the counted passcodes (Omega's cover card) are ignored.
+    const withCover = new Uint8Array([...payload, ...uint32sToBytes([99])])
+    expect(readOmegaPayload(withCover)).toEqual({ mainAndExtra: [1, 2, 3], side: [4] })
     expect(() => omegaPayload(Array.from({ length: 256 }, () => 1), [])).toThrow(RangeError)
   })
 

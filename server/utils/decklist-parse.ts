@@ -50,8 +50,9 @@ function fromPasscodes(format: ParsedDecklist['format'], sections: PasscodeSecti
   }
 }
 
-// A code holds at most 255 + 255 passcodes; nothing bigger is one.
-const OMEGA_MAX_PAYLOAD = 2 + 4 * (255 + 255)
+// A code holds at most 255 + 255 passcodes plus a short trailer (the cover
+// card); nothing bigger is one.
+const OMEGA_MAX_PAYLOAD = 2 + 4 * (255 + 255) + 64
 
 // An Omega code is one token of base64 characters; a card name or a list of
 // names has spaces or is too short, and what doesn't inflate isn't a code.
