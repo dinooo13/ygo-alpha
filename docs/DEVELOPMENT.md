@@ -162,19 +162,59 @@ match. The collection comes from a "Standard-Sammlung" default and can be
 overridden per row; a set code only identifies the card, no printing is stored
 (see [`docs/adr/0017-inventory-without-collector-details.md`](adr/0017-inventory-without-collector-details.md)).
 Saving posts the rows to `POST /api/inventory/bulk` in batches of 50, each
-batch in one transaction.
+batch in one transaction. The review table empties as rows are saved; what was
+written (card, copies, collection and the stack ids of the bulk answer) stays
+in a "Gerade gespeichert" panel below it, which moves exactly those copies to
+another collection through `POST /api/inventory/move` and can be dismissed. It
+never refills the review table, so nothing is written twice.
 
 Recognizing a card from a photo now lives in the chat assistant
 (`/assistant`, see below) instead of its own modes here
 — see [`docs/adr/0010-chat-assistant-with-tools.md`](adr/0010-chat-assistant-with-tools.md)
 (supersedes [`docs/adr/0003`](adr/0003-client-side-ocr-and-speech-entry.md)).
 
+## Inventar und Sammlungen
+
+The inventory is the master list; collections partition it (a copy is in one
+collection or none, [ADR 0030](adr/0030-collections-built-by-moving-copies.md)).
+Collections are built by moving copies:
+
+- `POST /api/inventory/move` takes up to 200 `{ ownedCardId, quantity?,
+  toCollectionId }` items (`null` = ohne Sammlung, no `quantity` = the whole
+  stack) and applies them in one transaction. It answers with the stack each
+  item ended up in. A partial move splits the stack; a whole stack is re-pointed
+  or merged into the target's stack (notes joined, target first).
+- The "Liste" of `/inventory` has a "Verschieben" button per row and "Auswählen"
+  for a selection of whole stacks; the target can be a new collection.
+- `POST /api/decks/:id/fill-collection` (`{ collectionId, sourceCollectionIds?,
+  dryRun? }`) moves what a deck needs (main + extra + side per card, copies
+  already in the target counted) into a collection, taking from the sources in
+  the given order, "ohne Sammlung" first by default. The dialog is reached from
+  a collection's "…" menu on `/inventory` and from a deck's menu on `/decks`.
+- The deck builder's card source has a "Quelle" select. It sends
+  `collectionId` plus `scoped=1` to `GET /api/inventory/search`, which then
+  counts only that collection's copies (without `scoped`, a `collectionId` only
+  decides which cards qualify, as on the inventory page).
+
+### Kartenart filter
+
+The catalog (`GET /api/catalog/cards`), the inventory (`GET /api/inventory`,
+`GET /api/inventory/search`) and the deck builder's card source take
+`kind=` (comma list or repeated): `normal`, `effect`, `ritual`, `fusion`,
+`synchro`, `xyz`, `link`, `pendulum`, `token`, `spell`, `trap`. A card's kind
+is its frame (`catalog_card.frame_type`, with the type-line keywords of
+`shared/card-frame.ts` as the fallback, in SQL in
+`server/utils/card-kind-sql.ts`), so "Effekt" also covers Flip, Tuner, Spirit,
+Toon, Union and Gemini monsters; Pendulum is a second kind next to the frame.
+The exact `type=` filter stays as the finer one and combines with it (AND).
+
 ## Decks
 
 Decks live under `/decks`: the list page searches by deck name *or* by a card
 contained in the deck, and the editor at `/decks/<id>` manages the Main, Extra,
 and Side Deck of a single deck. Cards are added from the card source panel,
-which searches the user's inventory by default and, with "Auch Katalogkarten
+which searches the user's inventory by default (all collections, or one chosen
+in "Quelle", see above) and, with "Auch Katalogkarten
 anzeigen", the whole catalog — so a deck can be planned with cards that aren't
 owned yet. Fusion/Synchro/XYZ/Link monsters can only go into the Extra or Side
 Deck; every other card only into the Main or Side Deck.

@@ -154,6 +154,24 @@ code, `NUXT_INVITE_CODE`) and the catalog sync endpoints need an admin token
 `scripts/deploy-plesk.sh`, locally or from the manual GitHub Actions workflow
 (ADR 0028).
 
+Tester-Feedback Sept 2026 (done): the inventory is the master list and
+collections are built by moving copies out of it, per deck if wanted
+([ADR 0030](adr/0030-collections-built-by-moving-copies.md)).
+
+- [x] Move copies between collections, partially and in bulk
+      (`POST /api/inventory/move`): a "Verschieben" button per "Liste" row with
+      a quantity stepper, and "Auswählen" to move a selection of stacks.
+- [x] "Sammlung aus Deck befüllen": moves the copies a deck needs into a
+      collection, with sources in priority order, a preview, the result, the
+      shortfall and an "Auf Wunschliste" action.
+- [x] The deck builder's card source has a "Quelle" (all collections, ohne
+      Sammlung, one collection) with that collection's own counts.
+- [x] A grouped "Kartenart" filter (Normal, Effekt, Ritual, Fusion, Synchro,
+      XYZ, Link, Pendel, Spielmarke, Zauber, Falle) in the catalog, the
+      inventory and the deck builder; "Effekt" includes Flip, Tuner, Spirit,
+      Toon, Union and Gemini monsters, the exact "Typ" stays as the finer
+      filter.
+
 ### Phase 2: Faster Card Entry
 
 Goal: Make it faster and easier to add many cards to the inventory.
@@ -185,6 +203,11 @@ as follow-up work.
 
 Voice input is currently not offered: Web Speech dictation in the chat
 composer was removed because it didn't work reliably; it's open again.
+
+Tester-Feedback Sept 2026 (done): after saving, the quick entry keeps a
+"gerade gespeichert" panel (card, copies, collection) that moves exactly those
+copies to another collection, so the list doesn't have to be typed in again
+([ADR 0030](adr/0030-collections-built-by-moving-copies.md)).
 
 ### Phase 3: Deckbuilder
 

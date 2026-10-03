@@ -39,3 +39,4 @@ mark the old as superseded.
 | [0029](0029-security-headers.md) | Security headers and a hash-based Content Security Policy | Accepted |
 | [0030](0030-edison-format.md) | Edison as a built-in format with a static banlist | Accepted |
 | [0031](0031-tournament-league-scoring.md) | Tournament scoring, byes, no draws, league tables and withdrawing | Accepted |
+| [0030](0030-collections-built-by-moving-copies.md) | Collections are built by moving copies out of the inventory | Accepted |
