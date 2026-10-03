@@ -101,7 +101,7 @@ function onPicked(card: PickedCatalogCard) {
       size="sm"
     />
 
-    <div class="min-w-0 flex-1 basis-40">
+    <div class="min-w-0 flex-1 basis-36">
       <p class="truncate text-sm font-medium text-highlighted">
         {{ selected ? cardName(selected) : t('quickEntry.status.ohne_treffer') }}
       </p>
@@ -139,7 +139,7 @@ function onPicked(card: PickedCatalogCard) {
       :items="candidateItems"
       :placeholder="t('quickEntry.row.pickCandidate')"
       :aria-label="t('quickEntry.row.candidateFor', { line: row.raw })"
-      class="w-full sm:w-64"
+      class="w-full sm:w-52"
     />
     <p
       v-else
@@ -153,7 +153,9 @@ function onPicked(card: PickedCatalogCard) {
       color="neutral"
       variant="outline"
       size="sm"
-      :label="t('quickEntry.row.catalog')"
+      :aria-label="t('decks.import.searchCatalogFor', { line: row.raw })"
+      :title="t('quickEntry.row.catalog')"
+      class="tap-target shrink-0"
       @click="() => { isPickerOpen = true }"
     />
     <UButton
