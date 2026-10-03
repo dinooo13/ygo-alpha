@@ -35,7 +35,8 @@
       "type": "Typ",
       "attribute": "Attribut",
       "race": "Monsterart",
-      "level": "Stufe/Rang"
+      "level": "Stufe/Rang",
+      "kind": "Kartenart"
     },
     "value": {
       "type": {
@@ -113,6 +114,19 @@
         "ritual": "Ritual",
         "counter": "Konter"
       }
+    },
+    "kind": {
+      "normal": "Normal",
+      "effect": "Effekt",
+      "ritual": "Ritual",
+      "fusion": "Fusion",
+      "synchro": "Synchro",
+      "xyz": "XYZ",
+      "link": "Link",
+      "pendulum": "Pendel",
+      "token": "Spielmarke",
+      "spell": "Zauber",
+      "trap": "Falle"
     }
   }
 }

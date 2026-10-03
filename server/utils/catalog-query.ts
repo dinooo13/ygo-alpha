@@ -1,13 +1,17 @@
 import { and, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import { catalogCard, catalogPrinting } from '../db/schema'
 import { activeCatalogCard, cardNameMatches, cardTextMatches } from './card-name-search'
+import { cardKindClause, parseCardKinds } from './card-kind-sql'
 import { parseQueryFlag } from './query-flag'
+import type { CardKind } from '../../shared/card-kind'
 
 export type CatalogSort = 'name' | '-name' | 'newest'
 
 export interface CardListQuery {
   q: string
   inText: boolean
+  // The grouped "Kartenart" filter (shared/card-kind.ts), next to the exact `types`.
+  kinds: CardKind[]
   types: string[]
   attributes: string[]
   races: string[]
@@ -51,6 +55,7 @@ export function parseCardListQuery(rawQuery: RawCardListQuery): CardListQuery {
   return {
     q: (getFirst(rawQuery.q) ?? '').trim(),
     inText: parseQueryFlag(rawQuery.inText),
+    kinds: parseCardKinds(getValues(rawQuery.kind)),
     types: getValues(rawQuery.type),
     attributes: getValues(rawQuery.attribute),
     races: getValues(rawQuery.race),
@@ -76,6 +81,11 @@ export function buildCardListWhere(filters: CardListQuery): SQL {
         ? or(nameCondition, cardTextMatches(filters.q))!
         : nameCondition,
     )
+  }
+
+  const kindClause = cardKindClause(filters.kinds)
+  if (kindClause) {
+    conditions.push(kindClause)
   }
 
   if (filters.types.length > 0) {

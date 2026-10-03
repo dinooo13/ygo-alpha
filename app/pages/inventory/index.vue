@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { LocationQueryRaw } from 'vue-router'
+import { isCardKind } from '~~/shared/card-kind'
 import { UNASSIGNED_COLLECTION_ID } from '~~/shared/inventory'
 import type { InventorySearchFilters } from '~/components/inventory/InventorySearchPanel.vue'
 import type { CardDetailPreview } from '~/utils/card-detail'
@@ -91,7 +92,7 @@ const selectedCard = ref<CatalogCard | null>(null)
 //   on load.
 // - The search (#148): `?q=` (the debounced text), `?inText=1` ("Auch im
 //   Kartentext suchen", kept even without a text, as in the catalog),
-//   `?type=` / `attribute` / `race` / `level` (comma lists) and `?sort=`
+//   `?kind=` / `type` / `attribute` / `race` / `level` (comma lists) and `?sort=`
 //   (Galerie; `name` is not written).
 // - `?page=` — the shown view's page (#148); each view keeps its own counter,
 //   the other one starts at 1 on a reload. Any filter or scope change goes
@@ -168,6 +169,7 @@ page.value = mode.value === 'list' ? initialPage : 1
 const filters = ref<SearchFilters>({
   q: typeof route.query.q === 'string' ? route.query.q : '',
   inText: route.query.inText === '1',
+  kind: queryList(route.query.kind).filter(isCardKind),
   type: queryList(route.query.type),
   attribute: queryList(route.query.attribute),
   race: queryList(route.query.race),
@@ -195,6 +197,7 @@ watch(() => filters.value.q, (value) => {
 const listQuery = computed(() => ({
   q: debouncedQ.value || undefined,
   inText: filters.value.inText ? 1 : undefined,
+  kind: filters.value.kind.length ? filters.value.kind.join(',') : undefined,
   type: filters.value.type.length ? filters.value.type.join(',') : undefined,
   attribute: filters.value.attribute.length ? filters.value.attribute.join(',') : undefined,
   race: filters.value.race.length ? filters.value.race.join(',') : undefined,
@@ -281,6 +284,7 @@ watch([debouncedQ, collectionId], () => {
 watch(
   () => [
     filters.value.inText,
+    filters.value.kind,
     filters.value.type,
     filters.value.attribute,
     filters.value.race,
@@ -301,6 +305,7 @@ watch(
   () => [
     debouncedQ.value,
     filters.value.inText,
+    filters.value.kind,
     filters.value.type,
     filters.value.attribute,
     filters.value.race,
@@ -315,6 +320,7 @@ watch(
     setQuery({
       q: debouncedQ.value.trim() || undefined,
       inText: filters.value.inText ? '1' : undefined,
+      kind: csvQueryValue(filters.value.kind),
       type: csvQueryValue(filters.value.type),
       attribute: csvQueryValue(filters.value.attribute),
       race: csvQueryValue(filters.value.race),
@@ -328,7 +334,8 @@ watch(
 
 // Whether any of the panel's facets is set.
 const hasActiveFacets = computed(() => Boolean(
-  filters.value.type.length
+  filters.value.kind.length
+  || filters.value.type.length
   || filters.value.attribute.length
   || filters.value.race.length
   || filters.value.level.length,
@@ -349,6 +356,7 @@ const searchPageSize = 24
 const searchQuery = computed(() => ({
   q: debouncedQ.value || undefined,
   inText: filters.value.inText ? 1 : undefined,
+  kind: filters.value.kind.length ? filters.value.kind.join(',') : undefined,
   type: filters.value.type.length ? filters.value.type.join(',') : undefined,
   attribute: filters.value.attribute.length ? filters.value.attribute.join(',') : undefined,
   race: filters.value.race.length ? filters.value.race.join(',') : undefined,

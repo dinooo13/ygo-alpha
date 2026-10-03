@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import { CARD_KINDS } from '~~/shared/card-kind'
+import type { CardKind } from '~~/shared/card-kind'
+
 /**
- * The four card facet menus (type, attribute, race, level), shared by the
+ * The card facet menus (kind, type, attribute, race, level), shared by the
  * catalog and the inventory so both filter the same way (#63), and by the
  * format editor's card filter (#120).
  *
  * - Multi-select; an empty array means "no filter".
+ * - "Kartenart" (`kind`) is the grouped filter by frame, "Typ" the exact type
+ *   line below it (shared/card-kind.ts); leave out `v-model:kind` to hide it.
  * - Multi-root (no wrapper): the parent's grid or flex places the menus, and
  *   `menuClass` sets their width (a multi-root component doesn't inherit `class`).
  * - Leave out `v-model:level` to hide the level menu (the format editor
@@ -25,6 +30,7 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
 }>(), { menuClass: 'w-full min-w-0', disabled: false })
 
+const kind = defineModel<CardKind[]>('kind')
 const type = defineModel<string[]>('type', { required: true })
 const attribute = defineModel<string[]>('attribute', { required: true })
 const race = defineModel<string[]>('race', { required: true })
@@ -34,6 +40,7 @@ const { t } = useI18n()
 const { cardValueOptions } = useCardText()
 
 // Filter values stay English (the APIs filter on them); labels follow the card language (ADR 0015).
+const kindItems = computed(() => CARD_KINDS.map(value => ({ label: t(`card.kind.${value}`), value })))
 const typeItems = computed(() => cardValueOptions('type', props.facets.types))
 const attributeItems = computed(() => cardValueOptions('attribute', props.facets.attributes))
 const raceItems = computed(() => cardValueOptions('race', props.facets.races))
@@ -41,6 +48,17 @@ const levelItems = computed(() => props.facets.levels.map(value => ({ label: t('
 </script>
 
 <template>
+  <USelectMenu
+    v-if="kind !== undefined"
+    v-model="kind"
+    multiple
+    value-key="value"
+    :items="kindItems"
+    :disabled="disabled"
+    :placeholder="t('card.field.kind')"
+    :aria-label="t('card.field.kind')"
+    :class="menuClass"
+  />
   <USelectMenu
     v-model="type"
     multiple

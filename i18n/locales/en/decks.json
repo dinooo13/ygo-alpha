@@ -142,7 +142,13 @@
         "addTo": "Add {name} to the {section}",
         "noSection": "{name} can't go in any section of this deck.",
         "loadMore": "Load more",
-        "loadMoreFailed": "Couldn't load more cards."
+        "loadMoreFailed": "Couldn't load more cards.",
+        "kind": "Card kind",
+        "allKinds": "All kinds",
+        "source": "Source",
+        "sourceAll": "All collections",
+        "sourceNone": "No collection",
+        "ownedInSource": "In {source}: {owned} · in deck: {inDeck}"
       },
       "overlay": {
         "title": "In the deck",
