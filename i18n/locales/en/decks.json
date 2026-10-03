@@ -63,7 +63,8 @@
         "complete": "All cards owned",
         "missing": "{count} card not owned | {count} cards not owned"
       },
-      "cardCount": "{count} card | {count} cards"
+      "cardCount": "{count} card | {count} cards",
+      "importDeck": "Import deck"
     },
     "form": {
       "createTitle": "New deck",
@@ -176,6 +177,49 @@
         "xyz": "Xyz",
         "link": "Link",
         "other": "Other"
+      }
+    },
+    "import": {
+      "title": "Import deck",
+      "description": "Paste a deck list or upload a .ydk file. YDK, ydke:// links, YGO Omega deck codes and text lists (recipe) are recognized.",
+      "reviewDescription": "Check the cards that were found. Open lines have to be matched to a card or removed.",
+      "list": {
+        "label": "Deck list",
+        "description": "Paste an Omega deck code, a ydke:// link, YDK contents or a list like “3 Dark Magician”.",
+        "placeholder": "Monster\n3 Dark Magician\nSpell\n2 Polymerization\nExtra\n1 Stardust Dragon\nSide\n2 Cosmic Cyclone"
+      },
+      "file": {
+        "label": "YDK file",
+        "pick": "Choose YDK file",
+        "hint": "Or upload a .ydk file."
+      },
+      "analyze": "Check deck list",
+      "back": "Back",
+      "create": "Create deck",
+      "format": "Format (optional)",
+      "detected": "Detected: {format}",
+      "formats": {
+        "ydke": "ydke:// link",
+        "omega": "YGO Omega deck code",
+        "ydk": "YDK",
+        "text": "Text list"
+      },
+      "cardCount": "{count} card | {count} cards",
+      "sectionEmpty": "No cards.",
+      "sizeWarningTitle": "The deck differs from the usual sizes",
+      "unresolvedHint": "Some lines are still open. Pick a card or remove the line to create the deck.",
+      "defaultName": "Imported deck",
+      "errors": {
+        "empty": "Please paste a deck list or choose a file first.",
+        "tooLong": "The deck list is too long (at most {max} characters).",
+        "tooManyCards": "A deck can have at most {max} different cards when it is created.",
+        "fileTooLarge": "The file is too large for a deck list.",
+        "fileUnreadable": "The file couldn't be read.",
+        "previewFailed": "The deck list couldn't be read.",
+        "createFailed": "Couldn't create the deck."
+      },
+      "toast": {
+        "created": "Deck imported"
       }
     }
   }
