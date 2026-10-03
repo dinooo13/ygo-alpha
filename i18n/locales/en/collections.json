@@ -46,7 +46,8 @@
       "summary": {
         "toMove": "{count} to move",
         "alreadyThere": "{count} already in the collection",
-        "missing": "{count} missing"
+        "missing": "{count} missing",
+        "moved": "{count} moved"
       },
       "nothingToMove": "There is nothing to move from the chosen sources.",
       "list": {

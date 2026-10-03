@@ -97,13 +97,30 @@ describe('FillFromDeckModal', () => {
     expect(text).toContain('3 fehlen')
     expect(text).toContain('Dark Magician')
     expect(text).toContain('×2')
-    expect(text).toContain('2 aus Ohne Sammlung')
-    expect(text).toContain('1 aus Deck-Box')
+    expect(text).toContain('aus Ohne Sammlung')
+    expect(text).toContain('aus Deck-Box')
     // The shortfall says what is missing and what lies in other collections.
     expect(document.querySelector('[data-testid="fill-shortfall"]')!.textContent).toContain('Mirror Force')
     expect(document.querySelector('[data-testid="fill-shortfall"]')!.textContent).toContain('2 fehlen · 1 in anderen Sammlungen')
     // Nothing is moved before "Sammlung befüllen".
     expect(callsTo(fetchMock, '/api/decks/deck-1/fill-collection')).toHaveLength(1)
+  })
+
+  it('names every source when the copies of one card come from several collections', async () => {
+    stubFetch((url, options) => {
+      if (url !== '/api/decks/deck-1/fill-collection' || !options.body?.dryRun) {
+        return undefined
+      }
+      const [first] = fillAnswer().cards
+      return fillAnswer({
+        cards: [{ ...first, toMove: 3, moves: [{ ownedCardId: 's1', fromCollectionId: null, quantity: 2 }, { ownedCardId: 's3', fromCollectionId: 'box-2', quantity: 1 }] }],
+        totals: { cards: 1, needed: 3, alreadyInTarget: 0, toMove: 3, missing: 0, notOwned: 0 },
+      })
+    })
+    await mountSuspended(FillFromDeckModal, { props: { open: true, deckId: 'deck-1', collectionId: 'box-1', collections } })
+
+    await vi.waitFor(() => expect(bodyText()).toContain('2 aus Ohne Sammlung, 1 aus Deck-Box'))
+    expect(bodyText()).toContain('Das Deck ist in dieser Sammlung vollständig.')
   })
 
   it('moves the copies and shows the result with the shortfall', async () => {
@@ -117,6 +134,8 @@ describe('FillFromDeckModal', () => {
     const run = callsTo(fetchMock, '/api/decks/deck-1/fill-collection')[1]![1]
     expect(run).toEqual({ method: 'POST', body: { collectionId: 'box-1', sourceCollectionIds: ['__none__', 'box-2'] } })
     expect(component.emitted('done')).toHaveLength(1)
+    expect(bodyText()).toContain('3 verschoben')
+    expect(bodyText()).not.toContain('3 zu verschieben')
     // Done: the choices are gone, the shortfall stays.
     expect(document.querySelector('[data-testid="fill-shortfall"]')).toBeTruthy()
     expect(button('Sammlung befüllen')).toBeUndefined()
@@ -206,7 +225,7 @@ describe('FillFromDeckModal', () => {
 
     expect(bodyText()).toContain('Fill collection from deck')
     expect(bodyText()).toContain('3 to move')
-    expect(bodyText()).toContain('2 from No collection')
+    expect(bodyText()).toContain('from No collection')
     expect(bodyText()).toContain('Take cards from')
     expect(bodyText()).not.toMatch(/Sammlung befüllen|verschieben|fehlen|Quelle/)
   })
