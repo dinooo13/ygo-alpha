@@ -16,7 +16,8 @@
       "edit": "Bearbeiten",
       "rename": "Umbenennen",
       "duplicate": "Duplizieren",
-      "share": "Teilen"
+      "share": "Teilen",
+      "fillCollection": "Sammlung befüllen …"
     },
     "confirm": {
       "delete": {

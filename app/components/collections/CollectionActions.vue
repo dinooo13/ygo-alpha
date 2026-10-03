@@ -5,7 +5,7 @@ import type { CollectionItem } from '~/composables/useCollections'
 /**
  * The inventory's collection scope: a "Sammlung" select (all cards, cards
  * without a collection, or one collection), "Neue Sammlung", and for a real
- * collection a "…" menu with Umbenennen / Teilen / Löschen.
+ * collection a "…" menu with Umbenennen / Teilen / Aus Deck befüllen / Löschen.
  *
  * `v-model` is the selected collection id — `''` for all cards,
  * `UNASSIGNED_COLLECTION_ID` for cards without a collection. The parent keeps
@@ -22,6 +22,8 @@ const emit = defineEmits<{
   changed: []
   // The selected collection was deleted (the model is already reset to '').
   deleted: []
+  // Copies were moved into the collection from a deck: the lists behind changed.
+  filled: []
 }>()
 
 const model = defineModel<string>({ required: true })
@@ -111,6 +113,9 @@ function onShareUpdated() {
   emit('changed')
 }
 
+// "Aus Deck befüllen": moves the copies a deck needs into the collection.
+const isFillOpen = ref(false)
+
 const menuItems = computed(() => {
   const collection = activeCollection.value
   if (!collection) {
@@ -129,6 +134,11 @@ const menuItems = computed(() => {
       // `/players//collections/:id` link — keep the entry disabled until then.
       disabled: !ownProfile.value?.handle,
       onSelect: () => openShare(collection),
+    },
+    {
+      label: t('collections.menu.fillFromDeck'),
+      icon: 'i-lucide-folder-input',
+      onSelect: () => { isFillOpen.value = true },
     },
     {
       label: t('common.delete'),
@@ -174,6 +184,13 @@ const menuItems = computed(() => {
       v-model:open="isFormOpen"
       :initial-values="editingCollection"
       @saved="onSaved"
+    />
+
+    <CollectionsFillFromDeckModal
+      v-model:open="isFillOpen"
+      :collection-id="activeCollection?.id ?? null"
+      :collections="collections"
+      @done="emit('filled')"
     />
 
     <SharingShareModal

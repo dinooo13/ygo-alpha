@@ -9,7 +9,8 @@
     "menu": {
       "optionsFor": "Optionen für {name}",
       "rename": "Umbenennen",
-      "share": "Teilen"
+      "share": "Teilen",
+      "fillFromDeck": "Aus Deck befüllen …"
     },
     "form": {
       "renameTitle": "Sammlung umbenennen",
@@ -32,6 +33,45 @@
     "createEllipsis": "Neue Sammlung…",
     "target": {
       "placeholder": "Sammlung wählen…"
+    },
+    "fill": {
+      "title": "Sammlung aus Deck befüllen",
+      "description": "Verschiebt die Karten, die ein Deck braucht (Main, Extra und Side), aus deinem Inventar in eine Sammlung. Sie verlassen ihre bisherige Sammlung, nichts wird doppelt gezählt. Das Deck bleibt unverändert.",
+      "deck": "Deck",
+      "deckPlaceholder": "Deck wählen …",
+      "target": "Ziel-Sammlung",
+      "sources": "Karten entnehmen aus",
+      "sourcesHint": "In dieser Reihenfolge: zuerst Karten ohne Sammlung, dann die anderen Sammlungen. Was schon in der Ziel-Sammlung liegt, zählt mit.",
+      "planning": "Vorschau wird berechnet …",
+      "summary": {
+        "toMove": "{count} zu verschieben",
+        "alreadyThere": "{count} schon in der Sammlung",
+        "missing": "{count} fehlen"
+      },
+      "nothingToMove": "Aus den gewählten Quellen gibt es nichts zu verschieben.",
+      "list": {
+        "move": "Wird verschoben",
+        "moved": "Verschoben",
+        "missing": "Fehlt"
+      },
+      "from": "aus {collection}",
+      "missingCount": "{count} fehlen",
+      "elsewhere": "{count} in anderen Sammlungen",
+      "complete": "Das Deck ist in dieser Sammlung vollständig.",
+      "run": "Sammlung befüllen",
+      "result": {
+        "moved": "{count} Karte nach „{collection}“ verschoben. | {count} Karten nach „{collection}“ verschoben."
+      },
+      "wishlist": {
+        "add": "{count} Karte auf die Wunschliste | {count} Karten auf die Wunschliste",
+        "done": "Auf der Wunschliste",
+        "success": "{count} Karte auf die Wunschliste gesetzt | {count} Karten auf die Wunschliste gesetzt",
+        "failed": "Die Wunschliste konnte nicht aktualisiert werden."
+      },
+      "errors": {
+        "planFailed": "Die Vorschau konnte nicht berechnet werden.",
+        "runFailed": "Die Sammlung konnte nicht befüllt werden."
+      }
     }
   }
 }
