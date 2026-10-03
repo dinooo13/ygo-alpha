@@ -3,6 +3,7 @@
     "noFormat": "No format",
     "noDeck": "No deck",
     "dropped": "Dropped",
+    "withdrawn": "Withdrawn from standings",
     "backToList": "Back to tournaments",
     "status": {
       "registration": "Registration",
@@ -22,6 +23,33 @@
     "roundStatus": {
       "pending": "Open",
       "completed": "Completed"
+    },
+    "scoring": {
+      "games": {
+        "label": "By games (3 · 2 · 1 · 0)",
+        "description": "A win without dropping a game is worth 3 points, a win that dropped a game 2, a loss that won a game 1, any other loss 0. A 2:0 therefore ranks above a 2:1."
+      },
+      "match": {
+        "label": "Classic (3 · 0)",
+        "description": "A win is 3 points, a loss 0, whatever the games. (A draw is 1, only in older tournaments.)"
+      }
+    },
+    "byeScoring": {
+      "none": {
+        "label": "No points",
+        "description": "A player who sits out gets no points and no match played."
+      },
+      "win": {
+        "label": "Like a 2:0 win",
+        "description": "A player who sits out gets 3 points, as after a 2:0 win."
+      }
+    },
+    "scoringPanel": {
+      "title": "Scoring",
+      "scoring": "Points",
+      "byeScoring": "Sitting out",
+      "editHint": "You can change this until the tournament starts.",
+      "saveFailed": "The scoring couldn't be changed."
     },
     "list": {
       "title": "Tournaments",
@@ -69,6 +97,8 @@
       "descriptionAriaLabel": "Description",
       "format": "Format",
       "pairingSystem": "Pairing system",
+      "scoring": "Points",
+      "byeScoring": "Sitting out (with an odd number of players)",
       "plannedRounds": "Planned rounds",
       "plannedRoundsPlaceholder": "Automatic",
       "plannedRoundsRoundRobinHint": "With \"Round robin\", the number of rounds follows from the number of participants.",
@@ -86,6 +116,9 @@
       "pairingSystem": "Pairing system: {name}",
       "notStarted": "Not started yet",
       "roundProgress": "Round {current} of {planned}",
+      "matchdayProgress": "Matchday {current} of {planned}",
+      "scoring": "Scoring: {name}",
+      "byeScoring": "Sitting out: {name}",
       "organizer": "Organizer: {name}",
       "actions": {
         "start": "Start tournament",
@@ -117,6 +150,10 @@
         "completeRoundFailed": "The round couldn't be completed.",
         "finishFailed": "The tournament couldn't be finished.",
         "deleteFailed": "The tournament couldn't be deleted."
+      },
+      "actionsRoundRobin": {
+        "completeRound": "Complete matchday",
+        "nextRound": "Next matchday"
       }
     },
     "participants": {
@@ -151,12 +188,18 @@
       "menu": {
         "rename": "Rename",
         "reinstate": "Reinstate",
-        "drop": "Drop from tournament"
+        "drop": "Drop from tournament",
+        "withdraw": "Take out of standings",
+        "unwithdraw": "Put back into standings"
       },
       "confirm": {
         "remove": {
           "title": "Remove participant",
           "description": "Remove {name} from the tournament? A registered deck will be lost."
+        },
+        "withdraw": {
+          "title": "Take out of standings",
+          "description": "Take {name} out of the standings? Every result involving {name}, past and future, stops counting for anyone. You can undo this while the tournament runs."
         }
       },
       "rename": {
@@ -168,7 +211,8 @@
         "addFailed": "The participant couldn't be added.",
         "renameFailed": "The participant couldn't be renamed.",
         "dropFailed": "The status couldn't be changed.",
-        "removeFailed": "The participant couldn't be removed."
+        "removeFailed": "The participant couldn't be removed.",
+        "withdrawFailed": "The standings status couldn't be changed."
       }
     },
     "deckRegistration": {
@@ -193,11 +237,14 @@
         "title": "Repeat pairing?",
         "description": "This pairing has already been played. Swap anyway?"
       },
-      "swapFailed": "These pairings couldn't be swapped."
+      "swapFailed": "These pairings couldn't be swapped.",
+      "titleRoundRobin": "Matchdays",
+      "emptyRoundRobin": "No matchday has been played yet.",
+      "matchday": "Matchday {number}"
     },
     "match": {
       "table": "Table {number}",
-      "bye": "Bye",
+      "bye": "Sits out",
       "byeScore": "Counts as {score}",
       "versus": "vs.",
       "draw": "Draw",
@@ -206,7 +253,11 @@
       "saveResult": "Save result",
       "enterResultFirst": "Enter a result first",
       "gamesOf": "Games won by {name}",
-      "saveFailed": "The result couldn't be saved."
+      "saveFailed": "The result couldn't be saved.",
+      "byeNoPoints": "not scored",
+      "winBy": "{name} wins {score}",
+      "voided": "Does not count",
+      "notPlayed": "Not played"
     },
     "standings": {
       "title": "Standings",
@@ -215,7 +266,16 @@
       "columns": {
         "rank": "Rank",
         "player": "Player",
-        "points": "Points"
+        "points": "Points",
+        "position": "Pos.",
+        "name": "Name",
+        "played": "P",
+        "wins": "W",
+        "draws": "D",
+        "losses": "L",
+        "games": "Games",
+        "difference": "Diff.",
+        "pointsShort": "Pts"
       },
       "record": "W-L-D",
       "recordTitle": "Wins–losses–draws",
@@ -227,7 +287,33 @@
       "ogwTitle": "Opponents' game win rate",
       "pointsShort": "pts",
       "rate": "{value}%",
-      "legend": "Points: win {win}, draw {draw} · W-L-D = wins–losses–draws · OMW% = opponents' match win rate · GW% = own game win rate · OGW% = opponents' game win rate"
+      "titleLeague": "Table",
+      "recordWinLoss": "W-L",
+      "recordWinLossTitle": "Wins–losses",
+      "league": {
+        "playedTitle": "Matches played",
+        "winsTitle": "Wins",
+        "drawsTitle": "Draws",
+        "lossesTitle": "Losses",
+        "gamesTitle": "Games won : games lost",
+        "differenceTitle": "Game difference",
+        "pointsTitle": "Points"
+      },
+      "withdrawnRank": "–",
+      "legendMatch": "Points: win {win}, draw {draw} · W-L-D = wins–losses–draws · OMW% = opponents' match win rate · GW% = own game win rate · OGW% = opponents' game win rate",
+      "legendGames": "Points: win without dropping a game {win}, win that dropped a game {narrowWin}, loss that won a game {narrowLoss}, any other loss 0 · W-L = wins–losses · OMW% = opponents' match win rate · GW% = own game win rate · OGW% = opponents' game win rate",
+      "legendLeague": "P = matches played · W = wins · L = losses · Games = games won : games lost · Diff. = game difference · Pts = points (win without dropping a game {win}, win that dropped a game {narrowWin}, loss that won a game {narrowLoss}, any other loss 0). Ties are broken by points, game difference, head-to-head (only between exactly two players), games won, seed.",
+      "legendLeagueMatch": "P = matches played · W = wins · D = draws · L = losses · Games = games won : games lost · Diff. = game difference · Pts = points (win {win}, draw {draw}). Ties are broken by points, game difference, head-to-head (only between exactly two players), games won, seed.",
+      "legendWithdrawn": "Players taken out of the standings are listed last; none of their matches counts for anyone.",
+      "view": {
+        "label": "View",
+        "table": "Table",
+        "crosstable": "Crosstable"
+      },
+      "crosstable": {
+        "caption": "Results from the row's view: the row's games : the column's games.",
+        "ariaLabel": "Crosstable of results"
+      }
     }
   }
 }

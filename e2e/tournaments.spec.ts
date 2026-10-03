@@ -120,7 +120,7 @@ test.describe('tournaments', () => {
     const round1Collapsed = page.getByRole('button').filter({ hasText: 'Runde 1' })
     await expect(round1Collapsed).toContainText('Abgeschlossen')
 
-    // --- Round 2: organizer vs Bob (both on 3 points), Alice vs Carla ---------
+    // --- Round 2: organizer vs Bob (both on 3 points), Alice vs Carla (0) -------
     await page.getByRole('button', { name: 'Nächste Runde' }).click()
     await expect(page.getByRole('heading', { name: 'Runde 2' })).toBeVisible()
 
@@ -129,7 +129,7 @@ test.describe('tournaments', () => {
     await round2Table1.getByLabel('Spiele Bob').fill('1')
     await round2Table1.getByRole('button', { name: 'Ergebnis speichern' }).click()
 
-    await matchRow(page, 2).getByRole('button', { name: '0:2' }).click()
+    await matchRow(page, 2).getByRole('button', { name: '1:2' }).click()
 
     await expect(page.getByRole('button', { name: 'Runde abschließen' })).toBeEnabled()
     await page.getByRole('button', { name: 'Runde abschließen' }).click()
@@ -140,7 +140,8 @@ test.describe('tournaments', () => {
     await expect(page.getByText('Dieses Turnier ist abgeschlossen und kann nicht mehr geändert werden.')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Nächste Runde' })).toHaveCount(0)
 
-    // --- Standings: organizer (6), Bob (3), Carla (3), Alice (0) --------------
+    // --- Standings under games scoring: organizer (3 + 2 for the 2:1 win),
+    // Bob (3 + 1 for a 1:2 loss), Carla (0 + 2 for a 2:1 win), Alice (0 + 1).
     await expect(page.getByRole('columnheader', { name: 'Platz' })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Punkte' })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'OMW%' })).toBeVisible()
@@ -152,19 +153,19 @@ test.describe('tournaments', () => {
     const standingsRows = standingsSection.locator('tbody tr')
     await expect(standingsRows).toHaveCount(4)
 
-    // Columns are Platz, Spieler, Punkte, S-N-U, OMW%, GW%, OGW% — read the
+    // Columns are Platz, Spieler, Punkte, S-N, OMW%, GW%, OGW% — read the
     // name and points columns by index instead of matching the row's full
-    // (unseparated) text, which concatenates "6" and "2-0-0" into "62-0-0".
+    // (unseparated) text, which concatenates "6" and "2-0" into "62-0".
     async function nameAndPoints(rowIndex: number) {
       const cells = standingsRows.nth(rowIndex).locator('td')
       return { name: await cells.nth(1).innerText(), points: (await cells.nth(2).innerText()).trim() }
     }
 
-    expect(await nameAndPoints(0)).toEqual(expect.objectContaining({ points: '6' }))
+    expect(await nameAndPoints(0)).toEqual(expect.objectContaining({ points: '5' }))
     expect((await nameAndPoints(0)).name).toContain(organizer.name)
-    expect(await nameAndPoints(1)).toEqual({ name: 'Bob', points: '3' })
-    expect(await nameAndPoints(2)).toEqual({ name: 'Carla', points: '3' })
-    expect(await nameAndPoints(3)).toEqual({ name: 'Alice', points: '0' })
+    expect(await nameAndPoints(1)).toEqual({ name: 'Bob', points: '4' })
+    expect(await nameAndPoints(2)).toEqual({ name: 'Carla', points: '2' })
+    expect(await nameAndPoints(3)).toEqual({ name: 'Alice', points: '1' })
 
     // --- History filter (#32: role and status are independent axes) ----------
     await page.goto('/tournaments')
@@ -389,9 +390,123 @@ test.describe('tournaments', () => {
 
     // --- Standings card: record inline, abbreviations explained -----------------
     const standingsSection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Tabelle' }) })
-    await expect(standingsSection.locator('tbody tr').first()).toContainText('1-0-0')
+    await expect(standingsSection.locator('tbody tr').first()).toContainText('1-0')
     await expect(page.getByRole('columnheader', { name: 'Platz' })).toBeHidden()
-    await expect(standingsSection.getByText('Siege–Niederlagen–Unentschieden')).toBeVisible()
+    await expect(standingsSection.getByText('Siege–Niederlagen').first()).toBeVisible()
     await expectNoHorizontalOverflow('standings')
+  })
+
+  test('runs a round robin as a league: 2:1 results, a league table, a withdrawn player and the crosstable', async ({ page }) => {
+    const organizer = await registerAndLogin(page)
+
+    await page.goto('/tournaments/new')
+    await waitForHydration(page)
+    await page.getByLabel('Turniername').fill('Ligaturnier')
+    await page.getByLabel('Paarungssystem').click()
+    await page.getByRole('option', { name: 'Jeder gegen jeden' }).click()
+    // New tournaments score by games and give a bye nothing (ADR 0028).
+    await expect(page.getByLabel('Punktevergabe')).toContainText('Nach Spielen')
+    await expect(page.getByLabel('Spielfrei (bei ungerader Spielerzahl)')).toContainText('Keine Punkte')
+    await page.getByRole('button', { name: 'Turnier anlegen' }).click()
+    await expect(page).toHaveURL(/\/tournaments\/[0-9a-f-]{36}$/)
+
+    await expect(page.getByText('Wertung: Nach Spielen (3 · 2 · 1 · 0)')).toBeVisible()
+    await expect(page.getByText('Spielfrei: Keine Punkte')).toBeVisible()
+    // The organizer may still change the scoring while registering.
+    await expect(page.getByText('Du kannst das ändern, solange das Turnier noch nicht gestartet ist.')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Als Gast' }).click()
+    const guestNameField = page.getByLabel('Name')
+    for (const name of ['Alice', 'Bob']) {
+      await expect(guestNameField).toHaveValue('')
+      await guestNameField.fill(name)
+      await page.getByRole('button', { name: 'Teilnehmer hinzufügen' }).click()
+      await expect(participantRow(page, name)).toBeVisible()
+    }
+
+    await page.getByRole('button', { name: 'Turnier starten' }).click()
+    await expect(page.getByText('Läuft')).toBeVisible()
+    // Once started the scoring is fixed, and the rounds are matchdays with fixed pairings.
+    await expect(page.getByText('Du kannst das ändern, solange das Turnier noch nicht gestartet ist.')).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Spieltag 1' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Paarungen tauschen' })).toHaveCount(0)
+
+    // --- Matchday 1: Alice vs Bob, the organizer sits out (no points) --------------
+    const quickResults = matchRow(page, 1).getByRole('button', { name: /^(Alice|Bob) gewinnt \d:\d$/ })
+    await expect(quickResults).toHaveText(['2:0', '2:1', '1:2', '0:2'])
+    await expect(matchRow(page, 2)).toContainText('Spielfrei')
+    await expect(matchRow(page, 2)).toContainText('ohne Wertung')
+    // Equal games are not a result: "Ergebnis speichern" stays off, and there is no draw button.
+    await expect(matchRow(page, 1).getByRole('button', { name: 'Unentschieden' })).toHaveCount(0)
+    await matchRow(page, 1).getByLabel('Spiele Alice').fill('1')
+    await matchRow(page, 1).getByLabel('Spiele Bob').fill('1')
+    await expect(matchRow(page, 1).getByRole('button', { name: 'Ergebnis speichern' })).toBeDisabled()
+
+    await matchRow(page, 1).getByRole('button', { name: 'Alice gewinnt 2:1' }).click()
+    await expect(matchRow(page, 1)).toContainText('2:1')
+    await page.getByRole('button', { name: 'Spieltag abschließen' }).click()
+
+    // --- League table: Pl., Name, Sp., S, N, Spiele, Diff., Pkt. -------------------
+    const standingsSection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Tabelle' }) })
+    for (const header of ['Pl.', 'Name', 'Sp.', 'S', 'N', 'Spiele', 'Diff.', 'Pkt.']) {
+      await expect(standingsSection.getByRole('columnheader', { name: header, exact: true })).toBeVisible()
+    }
+    await expect(standingsSection.getByRole('columnheader', { name: 'OMW%' })).toHaveCount(0)
+    const leagueRows = standingsSection.getByTestId('standings-row')
+    // A 2:1 win is 2 points, the loss 1; the organizer, sitting out, has nothing.
+    await expect(leagueRows.nth(0)).toContainText('Alice')
+    await expect(leagueRows.nth(0).locator('td')).toHaveText(['1', 'Alice', '1', '1', '0', '2:1', '+1', '2'])
+    await expect(leagueRows.nth(1).locator('td')).toHaveText(['2', 'Bob', '1', '0', '1', '1:2', '-1', '1'])
+    await expect(leagueRows.nth(2).locator('td')).toHaveText(['3', organizer.name, '0', '0', '0', '0:0', '0', '0'])
+
+    // --- Matchday 2: organizer vs Bob, Alice sits out ---------------------------------
+    await page.getByRole('button', { name: 'Nächster Spieltag' }).click()
+    await expect(page.getByRole('heading', { name: 'Spieltag 2' })).toBeVisible()
+    await matchRow(page, 1).getByRole('button', { name: `${organizer.name} gewinnt 2:0` }).click()
+    await page.getByRole('button', { name: 'Spieltag abschließen' }).click()
+
+    // --- Matchday 3: organizer vs Alice; Alice is taken out of the standings ----------
+    await page.getByRole('button', { name: 'Nächster Spieltag' }).click()
+    await expect(page.getByRole('heading', { name: 'Spieltag 3' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Spieltag abschließen' })).toBeDisabled()
+
+    await page.getByRole('button', { name: 'Optionen für Alice' }).click()
+    await page.getByRole('menuitem', { name: 'Aus der Wertung nehmen' }).click()
+    await acceptConfirm(page)
+
+    // Her match needs no result any more, and her results count for nobody.
+    await expect(page.getByRole('button', { name: 'Spieltag abschließen' })).toBeEnabled()
+    await expect(matchRow(page, 1)).toContainText('Spielfrei')
+    await expect(matchRow(page, 1).getByRole('button', { name: /gewinnt/ })).toHaveCount(0)
+    await expect(leagueRows).toHaveCount(3)
+    await expect(leagueRows.nth(2)).toContainText('Alice')
+    await expect(leagueRows.nth(2)).toContainText('Aus der Wertung genommen')
+    await expect(leagueRows.nth(2).locator('td').first()).toHaveText('–')
+    await expect(leagueRows.nth(0).locator('td')).toHaveText(['1', organizer.name, '1', '1', '0', '2:0', '+2', '3'])
+    await expect(leagueRows.nth(1).locator('td')).toHaveText(['2', 'Bob', '1', '0', '1', '0:2', '-2', '0'])
+
+    // It is reversible while the tournament runs: her match is a real one again.
+    await page.getByRole('button', { name: 'Optionen für Alice' }).click()
+    await page.getByRole('menuitem', { name: 'Wieder in die Wertung nehmen' }).click()
+    await expect(page.getByRole('button', { name: 'Spieltag abschließen' })).toBeDisabled()
+    await expect(matchRow(page, 1).getByRole('button', { name: `${organizer.name} gewinnt 2:0` })).toBeVisible()
+
+    // Take her out again and finish.
+    await page.getByRole('button', { name: 'Optionen für Alice' }).click()
+    await page.getByRole('menuitem', { name: 'Aus der Wertung nehmen' }).click()
+    await acceptConfirm(page)
+    await page.getByRole('button', { name: 'Spieltag abschließen' }).click()
+    await page.getByRole('button', { name: 'Turnier abschließen' }).click()
+    await acceptConfirm(page)
+    await expect(page.getByText(`Sieger: ${organizer.name}`)).toBeVisible()
+
+    // --- Crosstable: only players who are still in the standings --------------------
+    await standingsSection.getByRole('button', { name: 'Kreuztabelle' }).click()
+    const crosstable = standingsSection.getByRole('table', { name: 'Kreuztabelle der Ergebnisse' })
+    await expect(crosstable.locator('tbody tr')).toHaveCount(2)
+    await expect(crosstable.locator('tbody tr').nth(0).locator('td')).toHaveText(['·', '2:0'])
+    await expect(crosstable.locator('tbody tr').nth(1).locator('td')).toHaveText(['0:2', '·'])
+    await standingsSection.getByRole('button', { name: 'Tabelle', exact: true }).click()
+    await expect(leagueRows).toHaveCount(3)
   })
 })

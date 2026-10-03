@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { MAX_PLANNED_ROUNDS, PAIRING_SYSTEMS, TOURNAMENT_DESCRIPTION_MAX_LENGTH, TOURNAMENT_NAME_MAX_LENGTH } from '~~/shared/tournaments'
-import type { PairingSystem, TournamentDetail } from '~~/shared/tournaments'
+import {
+  BYE_SCORINGS,
+  DEFAULT_BYE_SCORING,
+  DEFAULT_SCORING,
+  MAX_PLANNED_ROUNDS,
+  PAIRING_SYSTEMS,
+  SCORING_SYSTEMS,
+  TOURNAMENT_DESCRIPTION_MAX_LENGTH,
+  TOURNAMENT_NAME_MAX_LENGTH,
+} from '~~/shared/tournaments'
+import type { ByeScoring, PairingSystem, ScoringSystem, TournamentDetail } from '~~/shared/tournaments'
 
 usePageTitle('tournaments.new.title')
 
@@ -33,11 +42,18 @@ const formatItems = computed(() => [
 const pairingSystemItems = computed(() =>
   PAIRING_SYSTEMS.map(system => ({ label: t(`tournaments.pairingSystem.${system}.label`), value: system })))
 
+const scoringItems = computed(() =>
+  SCORING_SYSTEMS.map(scoring => ({ label: t(`tournaments.scoring.${scoring}.label`), value: scoring })))
+const byeScoringItems = computed(() =>
+  BYE_SCORINGS.map(byeScoring => ({ label: t(`tournaments.byeScoring.${byeScoring}.label`), value: byeScoring })))
+
 const form = reactive({
   name: '',
   description: '',
   formatId: NO_FORMAT,
   pairingSystem: 'swiss' as PairingSystem,
+  scoring: DEFAULT_SCORING as ScoringSystem,
+  byeScoring: DEFAULT_BYE_SCORING as ByeScoring,
   plannedRounds: '',
   includeSelf: true,
 })
@@ -79,6 +95,8 @@ async function submit() {
         description: form.description || null,
         formatId: form.formatId === NO_FORMAT ? null : form.formatId,
         pairingSystem: form.pairingSystem,
+        scoring: form.scoring,
+        byeScoring: form.byeScoring,
         plannedRounds: form.plannedRounds.trim() === '' ? null : Number(form.plannedRounds),
         includeSelf: form.includeSelf,
       },
@@ -152,6 +170,30 @@ async function submit() {
         />
         <p class="mt-1 text-xs text-muted">
           {{ t(`tournaments.pairingSystem.${form.pairingSystem}.description`) }}
+        </p>
+      </UFormField>
+
+      <UFormField :label="t('tournaments.new.scoring')">
+        <USelect
+          v-model="form.scoring"
+          :items="scoringItems"
+          :aria-label="t('tournaments.new.scoring')"
+          class="w-full"
+        />
+        <p class="mt-1 text-xs text-muted">
+          {{ t(`tournaments.scoring.${form.scoring}.description`) }}
+        </p>
+      </UFormField>
+
+      <UFormField :label="t('tournaments.new.byeScoring')">
+        <USelect
+          v-model="form.byeScoring"
+          :items="byeScoringItems"
+          :aria-label="t('tournaments.new.byeScoring')"
+          class="w-full"
+        />
+        <p class="mt-1 text-xs text-muted">
+          {{ t(`tournaments.byeScoring.${form.byeScoring}.description`) }}
         </p>
       </UFormField>
 

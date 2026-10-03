@@ -16,6 +16,18 @@ const apiError = useApiError()
 // rendered expanded, everything else lives in a collapsed section.
 const orderedRounds = computed(() => [...props.tournament.rounds].reverse())
 
+// A round robin is a league: its rounds are "Spieltage" (ADR 0028).
+const isRoundRobin = computed(() => props.tournament.pairingSystem === 'round_robin')
+
+function roundLabel(round: TournamentRoundDto): string {
+  return isRoundRobin.value
+    ? t('tournaments.rounds.matchday', { number: round.number })
+    : t('tournaments.rounds.round', { number: round.number })
+}
+
+const withdrawnIds = computed(() =>
+  props.tournament.participants.filter(participant => participant.withdrawn).map(participant => participant.id))
+
 function isCurrentRound(round: TournamentRoundDto): boolean {
   return props.tournament.currentRound?.id === round.id
 }
@@ -157,7 +169,7 @@ async function onSelectSlot(matchId: string, slot: 'a' | 'b') {
   <section class="panel p-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <h2 class="text-base font-semibold text-highlighted">
-        {{ t('tournaments.rounds.title') }}
+        {{ isRoundRobin ? t('tournaments.rounds.titleRoundRobin') : t('tournaments.rounds.title') }}
       </h2>
       <UButton
         v-if="tournament.canEditPairings"
@@ -187,7 +199,7 @@ async function onSelectSlot(matchId: string, slot: 'a' | 'b') {
       v-if="orderedRounds.length === 0"
       class="mt-4 text-sm text-muted"
     >
-      {{ t('tournaments.rounds.empty') }}
+      {{ isRoundRobin ? t('tournaments.rounds.emptyRoundRobin') : t('tournaments.rounds.empty') }}
     </p>
 
     <div class="mt-4 space-y-3">
@@ -201,7 +213,7 @@ async function onSelectSlot(matchId: string, slot: 'a' | 'b') {
         >
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold text-highlighted">
-              {{ t('tournaments.rounds.round', { number: round.number }) }}
+              {{ roundLabel(round) }}
             </h3>
             <UBadge
               size="sm"
@@ -215,6 +227,8 @@ async function onSelectSlot(matchId: string, slot: 'a' | 'b') {
             :key="match.id"
             :match="match"
             :tournament-id="tournament.id"
+            :bye-scoring="tournament.byeScoring"
+            :withdrawn-ids="withdrawnIds"
             :can-edit="canEditRound(round)"
             :swap-mode="swapMode && isCurrentRound(round)"
             :selected-a="isSlotSelected(match.id, 'a')"
@@ -236,7 +250,7 @@ async function onSelectSlot(matchId: string, slot: 'a' | 'b') {
             trailing-icon="i-lucide-chevron-down"
           >
             <span class="flex items-center gap-2">
-              <span class="text-sm font-semibold text-highlighted">{{ t('tournaments.rounds.round', { number: round.number }) }}</span>
+              <span class="text-sm font-semibold text-highlighted">{{ roundLabel(round) }}</span>
               <UBadge
                 size="sm"
                 variant="subtle"
@@ -252,6 +266,8 @@ async function onSelectSlot(matchId: string, slot: 'a' | 'b') {
                 :key="match.id"
                 :match="match"
                 :tournament-id="tournament.id"
+                :bye-scoring="tournament.byeScoring"
+                :withdrawn-ids="withdrawnIds"
                 :can-edit="false"
                 :swap-mode="false"
                 :selected-a="false"
