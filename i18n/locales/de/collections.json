@@ -28,6 +28,10 @@
     "errors": {
       "saveFailed": "Die Sammlung konnte nicht gespeichert werden.",
       "deleteFailed": "Die Sammlung konnte nicht gelöscht werden."
+    },
+    "createEllipsis": "Neue Sammlung…",
+    "target": {
+      "placeholder": "Sammlung wählen…"
     }
   }
 }

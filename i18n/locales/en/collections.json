@@ -28,6 +28,10 @@
     "errors": {
       "saveFailed": "Couldn't save the collection.",
       "deleteFailed": "Couldn't delete the collection."
+    },
+    "createEllipsis": "New collection…",
+    "target": {
+      "placeholder": "Choose a collection…"
     }
   }
 }

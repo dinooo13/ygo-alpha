@@ -339,7 +339,7 @@ const { data: collectionsData } = await useCollections()
 const sourceOptions = computed(() => [
   { label: t('decks.editor.addPanel.sourceAll'), value: ALL_SOURCES },
   { label: t('decks.editor.addPanel.sourceNone'), value: UNASSIGNED_COLLECTION_ID },
-  ...collectionsData.value.items.map(collection => ({ label: collection.name, value: collection.id })),
+  ...(collectionsData.value?.items ?? []).map(collection => ({ label: collection.name, value: collection.id })),
 ])
 const sourceSelection = computed({
   get: () => sourceCollectionId.value || ALL_SOURCES,

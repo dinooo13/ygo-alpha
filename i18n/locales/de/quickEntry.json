@@ -81,6 +81,15 @@
       "collectionFor": "Sammlung für {line}",
       "noSuggestions": "Keine Vorschläge — bitte im Katalog suchen.",
       "catalog": "Katalog"
+    },
+    "justSaved": {
+      "title": "Gerade gespeichert",
+      "description": "{count} Kopie ist jetzt im Inventar. Du kannst sie in eine andere Sammlung verschieben, ohne die Liste noch einmal einzulesen. | {count} Kopien sind jetzt im Inventar. Du kannst sie in eine andere Sammlung verschieben, ohne die Liste noch einmal einzulesen.",
+      "dismiss": "Schließen",
+      "list": "Gerade gespeicherte Karten",
+      "pick": "{name} auswählen",
+      "target": "Ziel-Sammlung",
+      "move": "In andere Sammlung verschieben"
     }
   }
 }

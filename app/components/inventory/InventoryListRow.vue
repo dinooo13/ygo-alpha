@@ -9,7 +9,8 @@
  * clickable (square, and its focus ring inset: the list clips anything
  * outside a row). The retired badge is a click/tap popover that raises
  * itself above it (`CardRetiredBadge`), so a tap opens its hint instead of
- * the card; it is focusable and must never be inside the button.
+ * the card; it is focusable and must never be inside the button. So are the
+ * "Verschieben" button and, while the page is selecting, the checkbox.
  */
 import { CARD_TEXT_EXCERPT_LENGTH } from '~~/shared/inventory'
 import { cardFrame } from '~~/shared/card-frame'
@@ -38,10 +39,15 @@ const props = defineProps<{
   collectionLabel: string
   /** False when the page is already scoped to one collection (or to none). */
   showCollection: boolean
+  /** The page is selecting rows: a checkbox shows in front of the row. */
+  selectable?: boolean
+  selected?: boolean
 }>()
 
 const emit = defineEmits<{
   open: []
+  move: []
+  toggle: []
 }>()
 
 const { t, n } = useI18n()
@@ -67,6 +73,14 @@ const excerpt = computed(() => {
   <!-- One markup for every width: stacked on phones, the quantity and
        collection in a column on the right from `sm` up. -->
   <li class="group relative flex gap-3 px-4 py-3 transition-colors hover:bg-elevated/40 focus-within:bg-elevated/40">
+    <UCheckbox
+      v-if="selectable"
+      :model-value="selected"
+      class="relative z-10 self-center"
+      :aria-label="t('inventory.select.row', { name: displayName })"
+      @update:model-value="emit('toggle')"
+    />
+
     <CardThumb
       :src="item.imageUrlSmall"
       :alt="displayName"
@@ -143,5 +157,16 @@ const excerpt = computed(() => {
         </span>
       </div>
     </div>
+
+    <UButton
+      icon="i-lucide-folder-input"
+      color="neutral"
+      variant="ghost"
+      size="sm"
+      class="tap-target relative z-10 shrink-0 self-start sm:self-center"
+      :aria-label="t('inventory.move.rowAction', { name: displayName })"
+      :title="t('inventory.move.title')"
+      @click="emit('move')"
+    />
   </li>
 </template>

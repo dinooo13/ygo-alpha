@@ -137,6 +137,7 @@ describe('inventory validation', () => {
       collectionId: '__none__',
       catalogCardId: 46986414,
       inText: false,
+      kind: [],
       type: [],
       attribute: [],
       race: [],

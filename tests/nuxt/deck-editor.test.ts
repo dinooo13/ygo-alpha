@@ -55,6 +55,7 @@ const state = vi.hoisted(() => ({
   source: { items: [] as Array<Record<string, unknown>>, total: 0 },
   facets: { types: [] as string[], attributes: [] as string[] },
   ownedQuantities: {} as Record<string, number>,
+  collections: { items: [] as Array<{ id: string, name: string }>, allCount: 0 },
   /** The add panel's `query` option (a computed), as passed to `useFetch`. */
   sourceQuery: null as unknown,
   formats: {
@@ -78,6 +79,9 @@ mockNuxtImport('useFetch', () => {
     }
     if (resolvedUrl === '/api/inventory/owned-quantities') {
       return { data: ref(state.ownedQuantities), pending: ref(false), error: ref(null), refresh: vi.fn() }
+    }
+    if (resolvedUrl === '/api/collections') {
+      return { data: ref(state.collections), pending: ref(false), error: ref(null), refresh: vi.fn() }
     }
     if (resolvedUrl === '/api/formats') {
       return { data: ref(state.formats), pending: ref(false), error: ref(null), refresh: vi.fn() }
@@ -711,6 +715,70 @@ describe('deck editor mutations', () => {
     finally {
       vi.useRealTimers()
     }
+  })
+
+  it('picks the add panel\'s "Quelle": a collection\'s own copies, or all', async () => {
+    state.collections = { items: [{ id: 'box-1', name: 'Box 1' }, { id: 'box-2', name: 'Deck-Box' }], allCount: 5 }
+    state.source = {
+      items: [{ catalogCardId: 46986414, name: 'Dark Magician', type: 'Normal Monster', attribute: 'DARK', race: 'Spellcaster', level: 7, imageSmall: null, totalQuantity: 2 }],
+      total: 1,
+    }
+    state.deck = darkMagicianDeck(1)
+    const sourceQuery = () => unref(state.sourceQuery as Ref<Record<string, unknown>>)
+
+    const component = await mountSuspended(DeckEditorPage)
+    const source = selectWithOption(component.findAllComponents(USelect), 'box-1')!
+
+    expect(optionLabels(source)).toEqual(['Alle Sammlungen', 'Ohne Sammlung', 'Box 1', 'Deck-Box'])
+    // Default: the whole inventory, as before.
+    expect(sourceQuery().collectionId).toBeUndefined()
+    expect(sourceQuery().scoped).toBeUndefined()
+    expect(component.text()).toContain('Besitz: 2 · im Deck: 1')
+
+    await source.setValue('box-1')
+    await flushPromises()
+    // The server counts only that collection's copies, so the owned count is that collection's.
+    expect(sourceQuery()).toMatchObject({ collectionId: 'box-1', scoped: 1 })
+    expect(component.text()).toContain('In Box 1: 2 · im Deck: 1')
+
+    await source.setValue('__none__')
+    await flushPromises()
+    expect(sourceQuery()).toMatchObject({ collectionId: '__none__', scoped: 1 })
+    expect(component.text()).toContain('In Ohne Sammlung: 2')
+
+    await source.setValue('__all_sources__')
+    await flushPromises()
+    expect(sourceQuery().collectionId).toBeUndefined()
+
+    // The catalog has no collections: the select is off and nothing is sent.
+    await source.setValue('box-2')
+    await checkboxByLabel(component, 'Auch Katalogkarten anzeigen').trigger('click')
+    await flushPromises()
+    expect(sourceQuery().collectionId).toBeUndefined()
+    expect(sourceQuery().scoped).toBeUndefined()
+    expect(component.find('[aria-label="Quelle"]').attributes('disabled')).toBeDefined()
+    state.collections = { items: [], allCount: 0 }
+  })
+
+  it('filters the add panel by "Kartenart" next to the exact type', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = darkMagicianDeck(1)
+    const sourceQuery = () => unref(state.sourceQuery as Ref<Record<string, unknown>>)
+
+    const component = await mountSuspended(DeckEditorPage)
+    const kind = selectWithOption(component.findAllComponents(USelect), 'effect')!
+
+    expect(optionLabels(kind)).toEqual(['Alle Kartenarten', 'Normal', 'Effekt', 'Ritual', 'Fusion', 'Synchro', 'XYZ', 'Link', 'Pendel', 'Spielmarke', 'Zauber', 'Falle'])
+    expect(sourceQuery().kind).toBeUndefined()
+
+    await kind.setValue('effect')
+    await flushPromises()
+    expect(sourceQuery()).toMatchObject({ kind: 'effect' })
+    expect(sourceQuery().type).toBeUndefined()
+
+    await kind.setValue('__all_kinds__')
+    await flushPromises()
+    expect(sourceQuery().kind).toBeUndefined()
   })
 
   it('ignores an emptied quantity field instead of deleting the card', async () => {
