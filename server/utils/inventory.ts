@@ -405,6 +405,16 @@ export async function updateOwnedCard(
   id: string,
   patch: Partial<InventoryInput>,
 ): Promise<OwnedCardView> {
+  return updateOwnedCardSync(db, userId, id, patch)
+}
+
+/** The synchronous core of `updateOwnedCard`, for callers inside a transaction (`moveOwnedCards`). */
+function updateOwnedCardSync(
+  db: Db,
+  userId: string,
+  id: string,
+  patch: Partial<InventoryInput>,
+): OwnedCardView {
   if (patch.quantity !== undefined && patch.quantity < 1) {
     badRequest('quantity must be a positive integer', 'quantity_invalid')
   }
@@ -477,6 +487,208 @@ export async function deleteOwnedCard(db: Db, userId: string, id: string) {
   if (deleted.length === 0) {
     ownedCardNotFound()
   }
+}
+
+export const INVENTORY_MOVE_MAX_ITEMS = 200
+
+/** One move: `quantity` copies of an owned-card stack into another collection (`null` = none). */
+export interface InventoryMoveInput {
+  ownedCardId: string
+  /** `null` moves what is left of the stack. */
+  quantity: number | null
+  toCollectionId: string | null
+}
+
+export interface InventoryMoveItemResult {
+  /** The stack the copies came from. */
+  ownedCardId: string
+  catalogCardId: number
+  fromCollectionId: string | null
+  toCollectionId: string | null
+  /** How many copies moved. */
+  quantity: number
+  /** The stack the copies are in now: the source itself (whole stack, no stack in the target yet), a new one, or the one they merged into. */
+  resultId: string
+  /** Copies left in the source stack; 0 = the stack is gone or moved as a whole. */
+  remaining: number
+}
+
+export interface InventoryMoveResult {
+  /** Total copies moved. */
+  moved: number
+  items: InventoryMoveItemResult[]
+}
+
+/**
+ * Validates a move body's shape: `{ items: [{ ownedCardId, quantity?,
+ * toCollectionId }] }`. `toCollectionId` has to be given; `null` means "ohne
+ * Sammlung". Ownership and quantities are checked against the database in
+ * `moveOwnedCards`.
+ */
+export function validateInventoryMoveInput(body: unknown): InventoryMoveInput[] {
+  if (!isRecord(body)) {
+    badRequest('Request body must be an object')
+  }
+
+  const rawItems = body.items
+  if (!Array.isArray(rawItems)) {
+    badRequest('items must be an array')
+  }
+  if (rawItems.length === 0) {
+    badRequest('items must contain at least one entry')
+  }
+  if (rawItems.length > INVENTORY_MOVE_MAX_ITEMS) {
+    badRequest(`items must contain at most ${INVENTORY_MOVE_MAX_ITEMS} entries`)
+  }
+
+  const inputs: InventoryMoveInput[] = []
+  const errors: InventoryBulkItemError[] = []
+
+  rawItems.forEach((rawItem, index) => {
+    try {
+      if (!isRecord(rawItem)) {
+        badRequest('Item must be an object')
+      }
+      const ownedCardId = rawItem.ownedCardId ?? rawItem.owned_card_id
+      if (typeof ownedCardId !== 'string' || ownedCardId.trim() === '') {
+        badRequest('ownedCardId is required')
+      }
+      if (!('toCollectionId' in rawItem) && !('to_collection_id' in rawItem)) {
+        badRequest('toCollectionId is required (null for no collection)')
+      }
+      inputs.push({
+        ownedCardId: ownedCardId.trim(),
+        quantity: rawItem.quantity === undefined || rawItem.quantity === null
+          ? null
+          : normalizePositiveInteger(rawItem.quantity, 'quantity', undefined, MAX_QUANTITY),
+        toCollectionId: normalizeOptionalString(rawItem.toCollectionId ?? rawItem.to_collection_id, 'toCollectionId'),
+      })
+    }
+    catch (error) {
+      const itemError = clientItemError(error)
+      if (itemError === undefined) {
+        throw error
+      }
+      errors.push({ index, ...itemError })
+    }
+  })
+
+  if (errors.length > 0) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Some items are invalid',
+      data: { code: 'items_invalid', errors },
+    })
+  }
+
+  return inputs
+}
+
+/**
+ * Moves copies between collections in one transaction (all or nothing): the
+ * source stack loses them (a stack that moves as a whole is re-pointed or, if
+ * the target already has a stack of the card, merged into it like
+ * `updateOwnedCard` does), the target stack gains them. Collections partition
+ * the copies, so nothing is counted twice: the inventory's total per card
+ * does not change. A note stays with the stack it was written on; a stack
+ * that moves as a whole takes it along.
+ *
+ * Items are checked first and reported per index like the bulk endpoint:
+ * a stack the user doesn't own, a target collection the user doesn't own,
+ * a target equal to the stack's collection, or more copies than the stack has
+ * (counting earlier items of the same batch that take from the same stack).
+ */
+export function moveOwnedCards(db: Db, userId: string, inputs: InventoryMoveInput[]): InventoryMoveResult {
+  return db.transaction((tx) => {
+    const txDb = tx as unknown as Db
+    const stackIds = [...new Set(inputs.map(input => input.ownedCardId))]
+    const stacks = new Map(
+      txDb
+        .select()
+        .from(ownedCard)
+        .where(and(eq(ownedCard.userId, userId), inArray(ownedCard.id, stackIds)))
+        .all()
+        .map(row => [row.id, row]),
+    )
+
+    const available = new Map<string, number>()
+    const errors: InventoryBulkItemError[] = []
+    const plan: Array<{ input: InventoryMoveInput, quantity: number }> = []
+
+    inputs.forEach((input, index) => {
+      try {
+        const stack = stacks.get(input.ownedCardId)
+        if (!stack) {
+          ownedCardNotFound()
+        }
+        if (input.toCollectionId) {
+          assertCollectionOwnedByUser(txDb, userId, input.toCollectionId)
+        }
+        if (input.toCollectionId === stack.collectionId) {
+          badRequest('The copies are already in this collection', 'move_same_collection')
+        }
+        const left = available.get(stack.id) ?? stack.quantity
+        const quantity = input.quantity ?? left
+        if (quantity < 1 || quantity > left) {
+          badRequest(`quantity must be at most ${left}`, 'move_quantity_exceeds', { max: left })
+        }
+        available.set(stack.id, left - quantity)
+        plan.push({ input, quantity })
+      }
+      catch (error) {
+        const itemError = clientItemError(error)
+        if (itemError === undefined) {
+          throw error
+        }
+        errors.push({ index, ...itemError })
+      }
+    })
+
+    if (errors.length > 0) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Some items are invalid',
+        data: { code: 'items_invalid', errors },
+      })
+    }
+
+    const items: InventoryMoveItemResult[] = []
+    let moved = 0
+
+    for (const { input, quantity } of plan) {
+      // Read again: an earlier item of the batch may have taken from this stack.
+      const source = txDb.select().from(ownedCard).where(eq(ownedCard.id, input.ownedCardId)).get()!
+      let resultId: string
+      let remaining = 0
+
+      if (quantity === source.quantity) {
+        resultId = updateOwnedCardSync(txDb, userId, source.id, { collectionId: input.toCollectionId }).id
+      }
+      else {
+        remaining = source.quantity - quantity
+        txDb.update(ownedCard).set({ quantity: remaining, updatedAt: new Date() }).where(eq(ownedCard.id, source.id)).run()
+        resultId = upsertOwnedCardRow(txDb, userId, {
+          catalogCardId: source.catalogCardId,
+          collectionId: input.toCollectionId,
+          quantity,
+          note: null,
+        }).row.id
+      }
+
+      moved += quantity
+      items.push({
+        ownedCardId: source.id,
+        catalogCardId: source.catalogCardId,
+        fromCollectionId: source.collectionId,
+        toCollectionId: input.toCollectionId,
+        quantity,
+        resultId,
+        remaining,
+      })
+    }
+
+    return { moved, items }
+  })
 }
 
 /**

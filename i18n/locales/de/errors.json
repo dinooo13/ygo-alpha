@@ -72,7 +72,9 @@
       "assistant_unreachable": "Der KI-Assistent ist derzeit nicht erreichbar.",
       "regenerate_not_allowed": "Diese Antwort kann nicht neu erzeugt werden, weil einer ihrer Vorschläge schon bearbeitet wurde.",
       "assistant_model_not_allowed": "Dieses Modell steht nicht zur Auswahl.",
-      "assistant_model_unavailable": "Das gewählte KI-Modell ist beim Anbieter nicht freigeschaltet oder nicht verfügbar. Wähle ein anderes Modell oder prüfe die Einrichtung beim Anbieter."
+      "assistant_model_unavailable": "Das gewählte KI-Modell ist beim Anbieter nicht freigeschaltet oder nicht verfügbar. Wähle ein anderes Modell oder prüfe die Einrichtung beim Anbieter.",
+      "move_same_collection": "Diese Karten sind schon in dieser Sammlung.",
+      "move_quantity_exceeds": "So viele Kopien gibt es nicht mehr (höchstens {max})."
     }
   }
 }

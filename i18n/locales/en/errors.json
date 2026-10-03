@@ -72,7 +72,9 @@
       "assistant_unreachable": "The AI assistant is currently unreachable.",
       "regenerate_not_allowed": "This answer can't be regenerated because one of its proposals was already resolved.",
       "assistant_model_not_allowed": "This model isn't available.",
-      "assistant_model_unavailable": "The selected AI model isn't enabled or available at the provider. Pick another model or check the provider setup."
+      "assistant_model_unavailable": "The selected AI model isn't enabled or available at the provider. Pick another model or check the provider setup.",
+      "move_same_collection": "These cards are already in this collection.",
+      "move_quantity_exceeds": "There aren't that many copies left (at most {max})."
     }
   }
 }
