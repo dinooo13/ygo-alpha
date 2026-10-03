@@ -13,6 +13,8 @@
       "quantity_too_large": "The quantity can be at most {max}.",
       "owned_card_not_found": "This card is no longer in your inventory.",
       "items_invalid": "Some lines are invalid.",
+      "too_many_lines": "Please process at most {max} different cards at a time.",
+      "invalid_decklist": "This deck code couldn't be read.",
       "collection_not_found": "This collection no longer exists.",
       "collection_name_taken": "A collection with this name already exists.",
       "wishlist_item_not_found": "This entry is no longer on your wishlist.",

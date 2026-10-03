@@ -12,14 +12,15 @@ import * as schema from '../../server/db/schema'
 import {
   MAX_ENTRY_LINES,
   normalizeCardName,
-  parseEntryLine,
   parseEntryText,
   parseSuggestLimit,
   parseSuggestRequest,
   resolveEntryLine,
   similarity,
   suggestCatalogMatches,
+  suggestForRequest,
 } from '../../server/utils/card-entry'
+import { parseEntryLine } from '../../server/utils/entry-line'
 
 function createTestDb() {
   const sqlite = new Database(':memory:')
@@ -498,5 +499,196 @@ describe('parseSuggestRequest', () => {
     expect(parseSuggestLimit(3)).toBe(3)
     expect(parseSuggestLimit(500)).toBe(20)
     expect(() => parseSuggestLimit(0)).toThrow()
+  })
+})
+
+// A real deck code copied from YGO Omega's "Export" (43 Main + Extra cards, 10 Side cards).
+const OMEGA_CODE = '0+a6LjWfEYbv/L/MAMIXps0AY4kjoiww/PbQdlYYFuz7zgDDKmaXWGB4zsmPjCC8uMSeGYRfys5kheHgpcuZQXj3GXs4XnDhIQscP7oGx/ll7xlguPCSLrM1cx1L/+bXjBYbk1k0uaWYg753MQcD8Ub3TWD8MGIuGIPsBNkBAA=='
+
+const OMEGA_RECIPE = `Monster
+3 Tearlaments Havnis
+1 Danger!? Jackalope?
+Spell
+2 Polymerization
+Trap
+2 Tearlaments Sulliek
+Extra
+2 Spright Elf
+Side
+2 Cosmic Cyclone`
+
+function queries(text: string) {
+  return parseSuggestRequest({ text }).lines.map(line => `${line.quantity} ${line.query}`)
+}
+
+describe('quick capture reads deck lists (header and comment lines are no cards)', () => {
+  const HEADERS = [
+    'Monster', 'Monsters', 'Monster Cards', 'Monsterkarten',
+    'Spell', 'Spells', 'Spell Cards', 'Zauber', 'Zauberkarten',
+    'Trap', 'Traps', 'Trap Cards', 'Fallen', 'Fallenkarten',
+    'Main', 'Main Deck', 'Maindeck', 'Hauptdeck',
+    'Extra', 'Extra Deck', 'Extradeck',
+    'Side', 'Side Deck', 'Sidedeck',
+  ]
+
+  it.each(HEADERS)('does not turn the header "%s" into a row', (header) => {
+    for (const variant of [header, header.toUpperCase(), `${header}:`, `${header} (21)`, `${header}: 21`]) {
+      expect(queries(`${variant}\n3 Kuriboh`), variant).toEqual(['3 Kuriboh'])
+      expect(parseEntryText(`${variant}\n3 Kuriboh`), variant).toHaveLength(1)
+    }
+  })
+
+  it('does not turn YDK markers and comments into rows', () => {
+    expect(queries('#created by Fabian\n#main\n!side\n#extra\n#whatever\nKuriboh')).toEqual(['1 Kuriboh'])
+  })
+
+  it('reads the Omega recipe sample', () => {
+    expect(queries(OMEGA_RECIPE)).toEqual([
+      '3 Tearlaments Havnis',
+      '1 Danger!? Jackalope?',
+      '2 Polymerization',
+      '2 Tearlaments Sulliek',
+      '2 Spright Elf',
+      '2 Cosmic Cyclone',
+    ])
+  })
+
+  it('reads a YDK as passcodes, a 7-digit one included, and merges the lines of a card', () => {
+    const lines = parseSuggestRequest({ text: '#created by x\n#main\n46986414\n46986414\n5318639\n#extra\n44508094\n!side\n46986414\n' }).lines
+
+    expect(lines).toEqual([
+      { raw: '46986414', quantity: 3, query: '46986414', passcode: 46986414 },
+      { raw: '5318639', quantity: 1, query: '05318639', passcode: 5318639 },
+      { raw: '44508094', quantity: 1, query: '44508094', passcode: 44508094 },
+    ])
+  })
+
+  it('reads the ydke sample', () => {
+    const lines = parseSuggestRequest({ text: 'ydke://o6lXBZyFNAI=!viOnAg==!7ydRAA==!' }).lines
+
+    expect(lines.map(line => line.passcode)).toEqual([89631139, 36996508, 44508094, 5318639])
+    expect(lines.every(line => line.quantity === 1)).toBe(true)
+  })
+
+  it('reads the Omega code sample', () => {
+    const lines = parseSuggestRequest({ text: OMEGA_CODE }).lines
+
+    expect(lines[0]).toMatchObject({ passcode: 27204311, quantity: 3 })
+    expect(lines.reduce((sum, line) => sum + line.quantity, 0)).toBe(53)
+    expect(lines.every(line => line.passcode !== undefined)).toBe(true)
+  })
+
+  it('merges before it counts: a 40-card YDK with one line per copy fits the line cap', () => {
+    const ydk = [
+      '#main',
+      ...Array.from({ length: 40 }, (_, index) => String(10_000_000 + (index % 14))),
+      '#extra',
+      ...Array.from({ length: 15 }, (_, index) => String(20_000_000 + (index % 5))),
+      '!side',
+    ].join('\n')
+
+    expect(ydk.split('\n').length).toBeGreaterThan(MAX_ENTRY_LINES)
+    const { lines } = parseSuggestRequest({ text: ydk })
+    expect(lines).toHaveLength(19)
+    expect(lines.reduce((sum, line) => sum + line.quantity, 0)).toBe(55)
+  })
+
+  it('still rejects more distinct cards than the line cap, with a code for the UI', () => {
+    const text = Array.from({ length: MAX_ENTRY_LINES + 1 }, (_, index) => String(10_000_000 + index)).join('\n')
+
+    expect(() => parseSuggestRequest({ text })).toThrow(expect.objectContaining({ data: { code: 'too_many_lines', params: { max: MAX_ENTRY_LINES } } }))
+  })
+
+  it('keeps the character cap and rejects a broken ydke link', () => {
+    expect(() => parseSuggestRequest({ text: `ydke://${'A'.repeat(20_000)}` })).toThrow()
+    expect(() => parseSuggestRequest({ text: 'ydke://nope' })).toThrow()
+    expect(() => parseSuggestRequest({ items: ['x'.repeat(20_001)] })).toThrow()
+  })
+
+  it('merges equal lines across sections and items', () => {
+    expect(queries('Monster\n2x Kuriboh\nSide\nKuriboh x1\nExtra\nKuriboh')).toEqual(['4 Kuriboh'])
+    expect(parseSuggestRequest({ text: 'Kuriboh', items: ['2x Kuriboh'] }).lines).toHaveLength(1)
+  })
+})
+
+describe('quick capture resolution of deck lists', () => {
+  let db: TestDb
+
+  beforeAll(() => {
+    db = createTestDb()
+    seedCatalogFixture(db)
+    seedTrickyNames(db)
+    db.insert(schema.catalogCard).values([
+      { id: 5318639, name: 'Mystical Space Typhoon', type: 'Spell Card', frameType: 'spell', desc: 'Destroy 1 Spell/Trap.', syncedAt: SYNCED_AT },
+      { id: 36996508, name: 'Gravity Bind', type: 'Trap Card', frameType: 'trap', desc: 'Level 4 or higher monsters cannot attack.', syncedAt: SYNCED_AT },
+      { id: 90000001, name: 'Monster Egg', type: 'Normal Monster', frameType: 'normal', desc: 'An egg.', syncedAt: SYNCED_AT },
+    ]).run()
+    db.insert(schema.catalogCardTranslation).values({
+      cardId: 90000001, locale: 'de', name: 'Monster-Ei', nameSearch: 'monsterei', source: 'ygoresources-git', syncedAt: SYNCED_AT,
+    }).run()
+  })
+
+  function lookup(text: string) {
+    return suggestForRequest(db, parseSuggestRequest({ text }))
+  }
+
+  it('never looks up a header: "Monster" no longer finds Monster-Ei', () => {
+    const results = lookup('Monster\n3 Dark Magician\nZauber\nPot of Greed\nFallen\nExtra Deck\nSide Deck')
+
+    expect(results.map(result => result.input.query)).toEqual(['Dark Magician', 'Pot of Greed'])
+    expect(results.map(result => result.candidates[0]!.matchedBy)).toEqual(['exact', 'exact'])
+    // The bug: it was a row, auto-selected at 0.857.
+    expect(suggestCatalogMatches(db, parseEntryLine('Monster'))[0]).toMatchObject({ cardId: 90000001 })
+  })
+
+  it('resolves the Omega recipe lines that exist in the catalog', () => {
+    const results = lookup('Monster\n3 Dark Magician\n1 Kuriboh\nSpell\n2 Raigeki\nExtra\n1 Stardust Dragon\nSide\n2 Monster Reborn')
+
+    expect(results.map(result => [result.input.quantity, result.candidates[0]!.cardId])).toEqual([
+      [3, CATALOG_FIXTURE_IDS.darkMagician],
+      [1, CATALOG_FIXTURE_IDS.kuriboh],
+      [2, CATALOG_FIXTURE_IDS.raigeki],
+      [1, CATALOG_FIXTURE_IDS.stardustDragon],
+      [2, CATALOG_FIXTURE_IDS.monsterReborn],
+    ])
+  })
+
+  it('resolves a YDK by passcode, the 7-digit one too, and merges the copies', () => {
+    const results = lookup('#main\n46986414\n46986414\n5318639\n#extra\n44508094\n!side\n46986414\n99999999')
+
+    expect(results.map(result => [result.input.quantity, result.candidates[0]?.cardId ?? null, result.candidates[0]?.matchedBy ?? null])).toEqual([
+      [3, CATALOG_FIXTURE_IDS.darkMagician, 'passcode'],
+      [1, 5318639, 'passcode'],
+      [1, CATALOG_FIXTURE_IDS.stardustDragon, 'passcode'],
+      // An unknown passcode is a row without a candidate, never a crash.
+      [1, null, null],
+    ])
+  })
+
+  it('resolves a ydke link by passcode', () => {
+    const results = lookup('ydke://o6lXBZyFNAI=!viOnAg==!7ydRAA==!')
+
+    expect(results.map(result => result.candidates[0]?.cardId ?? null)).toEqual([
+      CATALOG_FIXTURE_IDS.blueEyesWhiteDragon,
+      36996508,
+      CATALOG_FIXTURE_IDS.stardustDragon,
+      5318639,
+    ])
+  })
+
+  it('turns the unknown passcodes of an Omega code into unresolved rows', () => {
+    const results = lookup(OMEGA_CODE)
+
+    expect(results.length).toBeGreaterThan(10)
+    expect(results.every(result => result.input.passcode !== undefined)).toBe(true)
+    expect(results.every(result => result.candidates.length === 0)).toBe(true)
+  })
+
+  it('counts two "7 Colored Fish" lines as 7 + 7 copies of one card after the lookup', () => {
+    const results = lookup('7 Colored Fish\n7 Colored Fish')
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.input).toMatchObject({ quantity: 2, query: '7 Colored Fish' })
+    expect(results[0]!.candidates[0]).toMatchObject({ name: '7 Colored Fish', matchedBy: 'exact' })
   })
 })

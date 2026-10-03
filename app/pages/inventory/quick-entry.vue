@@ -5,6 +5,7 @@ import {
   createEntryRows,
 } from '~/utils/card-entry'
 import type { EntryRow, EntrySuggestResult } from '~/utils/card-entry'
+import { countEntryLines } from '~~/shared/decklist'
 
 interface CollectionOption {
   id: string
@@ -78,7 +79,8 @@ const LIST_EXAMPLES = ['3x Dark Magician', 'Dark Magician x3', 'Dark Magician (S
 
 const listText = ref('')
 
-const listLineCount = computed(() => listText.value.split(/\r?\n/).filter(line => line.trim() !== '').length)
+// Distinct card lines: a pasted YDK has one line per copy, and headers and comments are no cards.
+const listLineCount = computed(() => countEntryLines(listText.value))
 const tooManyLines = computed(() => listLineCount.value > MAX_ENTRY_LINES)
 
 async function submitList() {

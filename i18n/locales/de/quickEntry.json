@@ -10,7 +10,7 @@
     },
     "list": {
       "label": "Kartenliste",
-      "description": "Eine Karte pro Zeile. Anzahl, Set-Code oder Passcode werden automatisch erkannt.",
+      "description": "Eine Karte pro Zeile. Anzahl, Set-Code oder Passcode werden automatisch erkannt. Auch Decklisten (YDK, ydke://, Omega-Code, Rezept) gehen; Überschriften wie „Monster“ oder „Extra“ werden übersprungen.",
       "examples": "Beispiele:",
       "tooManyLines": "{count} Zeilen — bitte höchstens {max} auf einmal auswerten.",
       "submit": "Karten erkennen"
