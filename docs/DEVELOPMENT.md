@@ -149,6 +149,11 @@ nothing is written before it has been confirmed:
   or a bare `SDY-006`), and 8-digit passcodes (`46986414`) are recognized
   automatically. The passcode printed on a card also works when YGOPRODeck
   lists it as an alternate artwork of the card (ADR 0024).
+- **Decklisten** – the same box reads YDK files, `ydke://` links, YGO Omega deck
+  codes and text recipes (see [Decks](#decks)). Header, comment and section lines
+  (`Monster`, `Zauber`, `Extra Deck`, `#main`, `!side`) never become rows, and
+  entries for the same card are merged (across sections) before the 50-line cap, so
+  a YDK with one line per copy fits.
 
 The review table preselects certain matches (passcode, set code, exact name)
 and anything scoring at least 0.85, marks weaker hits as "Unsicher" with a
@@ -192,6 +197,27 @@ for a deck without a rule format — once a format is assigned, its rules govern
 the limits (see [Formate](#formate)). Only structurally invalid writes (unknown
 card, unknown section, negative quantity, more than 99 copies in a single row,
 card in a forbidden section) are rejected.
+
+### Import and export
+
+"Deck importieren" on the deck list creates a deck from a pasted list or a `.ydk`
+file; the deck editor and the shared deck view have an "Exportieren" menu. Both use
+the four formats players exchange decks in (`shared/decklist.ts`, the reader is
+`server/utils/decklist-parse.ts`):
+
+| Format | Shape |
+|--------|-------|
+| `ydke://` | `ydke://<main>!<extra>!<side>!`, each part base64 (standard or URL-safe) of uint32 LE passcodes, one per copy |
+| YGO Omega deck code | base64 of a raw-deflated payload: `uint8` Main + Extra count, `uint8` Side count, then the uint32 LE passcodes (Main and Extra mixed, then Side) |
+| YDK | `#created by …`, `#main`, `#extra`, `!side`, one passcode per line and copy (7-digit passcodes lose their leading zero) |
+| Text recipe | Omega's "Recipe": `Monster` / `Spell` / `Trap` / `Extra` / `Side` headers (English or German, also `Main Deck:` style) and `3 Name` lines; headerless lists work too |
+
+The import review (`POST /api/decks/import/preview`, read-only) matches every entry like
+quick capture does; unresolved lines must be matched or removed, and each resolved card
+goes to the section its type allows, because an Omega code doesn't separate Main from
+Extra. The deck is then created by `POST /api/decks`. Deck sizes outside the usual limits
+only warn. The export needs a passcode per card (`catalog_card.id`); a copy without one is
+left out of the passcode formats and a toast says so. The text recipe uses the English names.
 
 ## Formate
 
