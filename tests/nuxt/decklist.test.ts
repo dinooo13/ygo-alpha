@@ -51,12 +51,12 @@ function names(sections: DecklistSections) {
 
 describe('parseSectionHeader', () => {
   it.each([
-    ['Monster', 'main'], ['Monsters', 'main'], ['Monster Cards', 'main'], ['Monsterkarten', 'main'],
-    ['Spell', 'main'], ['Spells', 'main'], ['Spell Cards', 'main'], ['Zauber', 'main'], ['Zauberkarten', 'main'],
-    ['Trap', 'main'], ['Traps', 'main'], ['Trap Cards', 'main'], ['Fallen', 'main'], ['Fallenkarten', 'main'],
-    ['Main', 'main'], ['Main Deck', 'main'], ['Maindeck', 'main'], ['Hauptdeck', 'main'],
-    ['Extra', 'extra'], ['Extra Deck', 'extra'], ['Extradeck', 'extra'],
-    ['Side', 'side'], ['Side Deck', 'side'], ['Sidedeck', 'side'],
+    ['Monster', 'main'], ['Monsters', 'main'], ['Monster Cards', 'main'], ['Monsterkarte', 'main'], ['Monsterkarten', 'main'],
+    ['Spell', 'main'], ['Spells', 'main'], ['Spell Cards', 'main'], ['Zauber', 'main'], ['Zauberkarte', 'main'], ['Zauberkarten', 'main'],
+    ['Trap', 'main'], ['Traps', 'main'], ['Trap Cards', 'main'], ['Falle', 'main'], ['Fallen', 'main'], ['Fallenkarte', 'main'], ['Fallenkarten', 'main'],
+    ['Main', 'main'], ['Main Deck', 'main'], ['Maindeck', 'main'], ['Main-Deck', 'main'], ['Hauptdeck', 'main'],
+    ['Extra', 'extra'], ['Extra Deck', 'extra'], ['Extradeck', 'extra'], ['Extra-Deck', 'extra'],
+    ['Side', 'side'], ['Side Deck', 'side'], ['Sidedeck', 'side'], ['Side-Deck', 'side'],
   ] as const)('reads %s', (header, section) => {
     expect(parseSectionHeader(header)).toBe(section)
     expect(parseSectionHeader(header.toUpperCase())).toBe(section)
@@ -73,7 +73,7 @@ describe('parseSectionHeader', () => {
   })
 
   it('leaves card lines and comments alone', () => {
-    for (const line of ['3 Monster Reborn', 'Monster Reborn', 'Monster Egg', '#created by Fabian', '3', '46986414', 'Dark Magician (SDY-006)', '']) {
+    for (const line of ['3 Monster Reborn', 'Monster Reborn', 'Monster Egg', 'Monster-Ei', 'Fallen-Tribut', '#created by Fabian', '3', '46986414', 'Dark Magician (SDY-006)', '']) {
       expect(parseSectionHeader(line), line).toBeNull()
     }
   })

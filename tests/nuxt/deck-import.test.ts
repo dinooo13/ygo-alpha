@@ -63,6 +63,15 @@ describe('previewDeckImport', () => {
     expect(cardIds('side')).toEqual([[2, CATALOG_FIXTURE_IDS.monsterReborn]])
   })
 
+  it('reads the German headers of Omega\'s recipe, "Falle" included', () => {
+    const preview = previewDeckImport(db, 'Monster\n3 Dark Magician\nZauber\n2 Raigeki\nFalle\n1 Mirror Force\nExtra-Deck\n1 Stardust Dragon\nSide-Deck\n2 Monster Reborn')
+
+    const cardIds = (section: 'main' | 'extra' | 'side') => preview.sections[section].map(result => result.candidates[0]!.cardId)
+    expect(cardIds('main')).toEqual([CATALOG_FIXTURE_IDS.darkMagician, CATALOG_FIXTURE_IDS.raigeki, CATALOG_FIXTURE_IDS.mirrorForce])
+    expect(cardIds('extra')).toEqual([CATALOG_FIXTURE_IDS.stardustDragon])
+    expect(cardIds('side')).toEqual([CATALOG_FIXTURE_IDS.monsterReborn])
+  })
+
   it('matches a YDK and a ydke link by passcode; an unknown passcode is a row without candidates', () => {
     const ydk = previewDeckImport(db, `#created by x\n#main\n${CATALOG_FIXTURE_IDS.darkMagician}\n${CATALOG_FIXTURE_IDS.darkMagician}\n99999999\n#extra\n${CATALOG_FIXTURE_IDS.stardustDragon}\n!side\n`)
 

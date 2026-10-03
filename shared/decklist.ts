@@ -53,16 +53,21 @@ const HEADER_ALIASES: Record<string, DeckSection> = {
   'monster': 'main',
   'monsters': 'main',
   'monster cards': 'main',
+  'monsterkarte': 'main',
   'monsterkarten': 'main',
   'spell': 'main',
   'spells': 'main',
   'spell cards': 'main',
   'zauber': 'main',
+  'zauberkarte': 'main',
   'zauberkarten': 'main',
   'trap': 'main',
   'traps': 'main',
   'trap cards': 'main',
+  // Omega's German recipe says "Falle".
+  'falle': 'main',
   'fallen': 'main',
+  'fallenkarte': 'main',
   'fallenkarten': 'main',
   'main': 'main',
   'main deck': 'main',
@@ -76,8 +81,8 @@ const HEADER_ALIASES: Record<string, DeckSection> = {
   'sidedeck': 'side',
 }
 
-// "Monster", "Spell Cards:", "Main Deck (40)", "Extra Deck: 15", "#main", "!side".
-const HEADER_LINE = /^[#!]?\s*(\p{L}[\p{L} ]*?)\s*(?:[:([]\s*\d+\s*[)\]]?)?\s*:?$/u
+// "Monster", "Spell Cards:", "Main Deck (40)", "Extra-Deck: 15", "#main", "!side".
+const HEADER_LINE = /^[#!]?\s*(\p{L}[\p{L} -]*?)\s*(?:[:([]\s*\d+\s*[)\]]?)?\s*:?$/u
 
 /** The deck section a header line opens (`Monster`, `#extra`, `Side Deck:` …), else `null`. */
 export function parseSectionHeader(line: string): DeckSection | null {
@@ -85,7 +90,8 @@ export function parseSectionHeader(line: string): DeckSection | null {
   if (!match) {
     return null
   }
-  return HEADER_ALIASES[match[1]!.toLowerCase().replace(/\s+/g, ' ')] ?? null
+  // "Extra-Deck" (the German spelling) reads as "extra deck".
+  return HEADER_ALIASES[match[1]!.toLowerCase().replace(/[\s-]+/g, ' ')] ?? null
 }
 
 /** `#created by …` and every other `#` line that is not a section marker. */
