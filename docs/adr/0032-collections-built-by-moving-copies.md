@@ -1,4 +1,4 @@
-# 0030: Collections are built by moving copies out of the inventory
+# 0032: Collections are built by moving copies out of the inventory
 
 ## Status
 
