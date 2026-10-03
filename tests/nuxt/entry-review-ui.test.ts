@@ -304,6 +304,30 @@ describe('EntryReviewTable', () => {
     expect(component.emitted('saved')?.at(-1)).toEqual([{ created: 100, merged: 0 }])
   }, 20_000)
 
+  it('reports what was written, stack by stack, without putting the rows back', async () => {
+    const fetchMock = vi.fn(async () => ({ created: 1, merged: 1, items: [{ id: 'stack-a' }, { id: 'stack-b' }] }))
+    vi.stubGlobal('$fetch', fetchMock)
+
+    const rows = createEntryRows([
+      result('3x Dark Magician', [candidate({ cardId: 46986414, name: 'Dark Magician', nameDe: 'Dunkler Magier' })], { quantity: 3 }),
+      result('Pot of Greed', [candidate({ cardId: 55144522, name: 'Pot of Greed' })]),
+    ])
+    rows[1]!.collectionId = 'col-1'
+    const component = await mountTable(rows)
+
+    await findButton(component, 'Alle speichern')!.trigger('click')
+    await flushPromises()
+
+    expect(component.emitted('savedCopies')?.at(-1)).toEqual([[
+      { ownedCardId: 'stack-a', catalogCardId: 46986414, name: 'Dark Magician', nameDe: 'Dunkler Magier', quantity: 3, collectionId: null },
+      { ownedCardId: 'stack-b', catalogCardId: 55144522, name: 'Pot of Greed', nameDe: null, quantity: 1, collectionId: 'col-1' },
+    ]])
+    // The saved rows leave the queue for good; the panel does not feed it.
+    const updates = component.emitted('update:rows') as Array<[EntryRow[]]>
+    expect(updates.at(-1)?.[0]).toHaveLength(0)
+    expect(fetchMock.mock.calls.filter(call => (call as unknown as [string])[0] === '/api/inventory/bulk')).toHaveLength(1)
+  })
+
   it('maps per-item errors back to the rows the user sees and keeps them', async () => {
     vi.stubGlobal('$fetch', vi.fn(async () => {
       throw {
@@ -383,6 +407,32 @@ describe('Schnellerfassung page', () => {
       .filter(call => call[0] === '/api/inventory/entry/suggest')
     expect(suggestCalls).toHaveLength(2)
     expect(component.text()).toContain('4 gesamt')
+  })
+
+  it('keeps a "gerade gespeichert" panel after the save emptied the review table', async () => {
+    const fetchMock = vi.fn(async (url: string) => url === '/api/inventory/bulk'
+      ? { created: 1, merged: 0, items: [{ id: 'stack-a' }] }
+      : { results: [exactResult] })
+    vi.stubGlobal('$fetch', fetchMock)
+
+    const component = await mountSuspended(QuickEntryPage)
+    expect(component.find('[data-testid="just-saved"]').exists()).toBe(false)
+
+    await component.find('textarea').setValue('Dark Magician')
+    await component.findAll('button').find(button => button.text().includes('Karten erkennen'))!.trigger('click')
+    await flushPromises()
+    await component.findAll('button').find(button => button.text().includes('Alle speichern'))!.trigger('click')
+    await flushPromises()
+
+    const panel = component.find('[data-testid="just-saved"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('Gerade gespeichert')
+    expect(panel.text()).toContain('Dark Magician')
+    // The review table is empty again: nothing is queued twice.
+    expect(component.text()).not.toContain('Prüfen und korrigieren')
+
+    await panel.findAll('button').find(button => button.text().includes('Schließen'))!.trigger('click')
+    expect(component.find('[data-testid="just-saved"]').exists()).toBe(false)
   })
 
   it('renders in English', async () => {

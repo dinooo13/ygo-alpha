@@ -6,11 +6,8 @@ import {
 } from '~/utils/card-entry'
 import type { EntryRow, EntrySuggestResult } from '~/utils/card-entry'
 import { countEntryLines } from '~~/shared/decklist'
-
-interface CollectionOption {
-  id: string
-  name: string
-}
+import { mergeSavedCopies } from '~/utils/saved-copies'
+import type { SavedCopy } from '~/utils/saved-copies'
 
 usePageTitle('quickEntry.title')
 
@@ -32,9 +29,9 @@ const presetCollectionId = computed(() => {
   return typeof value === 'string' && value !== '' ? value : null
 })
 
-const { data: collectionsData } = await useFetch<{ items: CollectionOption[], allCount: number }>('/api/collections', {
-  default: () => ({ items: [], allCount: 0 }),
-})
+// The shared collections fetch (`useCollections`): creating a collection in the
+// "gerade gespeichert" panel refreshes it for everyone.
+const { data: collectionsData } = await useCollections()
 const collections = computed(() => collectionsData.value?.items ?? [])
 
 async function requestSuggestions(body: { text?: string, items?: string[] }) {
@@ -100,6 +97,18 @@ async function submitList() {
 }
 
 // --- Speichern -------------------------------------------------------------
+
+// What was saved so far, to move to another collection (EntryJustSavedPanel).
+// The review table empties on save; this does not feed it, so nothing is
+// written twice.
+const justSaved = ref<SavedCopy[]>([])
+const justSavedPanel = useTemplateRef<{ focus: () => void }>('justSavedPanel')
+
+async function onSavedCopies(copies: SavedCopy[]) {
+  justSaved.value = mergeSavedCopies(justSaved.value, copies)
+  await nextTick()
+  justSavedPanel.value?.focus()
+}
 
 function onSaved(result: { created: number, merged: number }) {
   toast.add({
@@ -213,13 +222,21 @@ function onSaved(result: { created: number, merged: number }) {
         :collections="collections"
         :preset-collection-id="presetCollectionId"
         @saved="onSaved"
+        @saved-copies="onSavedCopies"
       />
     </div>
     <p
-      v-else-if="!isSuggesting"
+      v-else-if="!isSuggesting && justSaved.length === 0"
       class="text-sm text-muted"
     >
       {{ t('quickEntry.review.nothingYet') }}
     </p>
+
+    <EntryJustSavedPanel
+      v-if="justSaved.length > 0"
+      ref="justSavedPanel"
+      v-model:copies="justSaved"
+      :collections="collections"
+    />
   </div>
 </template>

@@ -8,6 +8,8 @@ import {
   summarizeEntryRows,
 } from '~/utils/card-entry'
 import type { EntryDefaults, EntryRow } from '~/utils/card-entry'
+import { mergeSavedCopies, savedCopiesOf } from '~/utils/saved-copies'
+import type { SavedCopy } from '~/utils/saved-copies'
 
 interface CollectionOption {
   id: string
@@ -15,6 +17,13 @@ interface CollectionOption {
 }
 
 interface BulkResponse {
+  created: number
+  merged: number
+  /** The stacks written, in the order of the request. */
+  items?: Array<{ id: string }>
+}
+
+interface SavedResult {
   created: number
   merged: number
 }
@@ -25,7 +34,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  saved: [result: BulkResponse]
+  saved: [result: SavedResult]
+  // What was written, stack by stack, for the "gerade gespeichert" panel;
+  // the rows themselves are gone by then.
+  savedCopies: [copies: SavedCopy[]]
 }>()
 
 const rows = defineModel<EntryRow[]>('rows', { required: true })
@@ -99,6 +111,7 @@ async function save() {
   itemErrors.value = []
 
   const savedRowIds = new Set<string>()
+  let savedCopies: SavedCopy[] = []
   let created = 0
   let merged = 0
 
@@ -111,6 +124,7 @@ async function save() {
 
       created += response.created
       merged += response.merged
+      savedCopies = mergeSavedCopies(savedCopies, savedCopiesOf(chunk, response.items, rows.value))
       for (const entry of chunk) {
         savedRowIds.add(entry.rowId)
       }
@@ -135,6 +149,9 @@ async function save() {
 
   if (created + merged > 0) {
     emit('saved', { created, merged })
+    if (savedCopies.length > 0) {
+      emit('savedCopies', savedCopies)
+    }
   }
 }
 

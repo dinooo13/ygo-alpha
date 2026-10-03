@@ -81,6 +81,15 @@
       "collectionFor": "Collection for {line}",
       "noSuggestions": "No suggestions — please search the catalog.",
       "catalog": "Catalog"
+    },
+    "justSaved": {
+      "title": "Just saved",
+      "description": "{count} copy is in your inventory now. You can move it to another collection without reading the list in again. | {count} copies are in your inventory now. You can move them to another collection without reading the list in again.",
+      "dismiss": "Dismiss",
+      "list": "Cards just saved",
+      "pick": "Select {name}",
+      "target": "Target collection",
+      "move": "Move to another collection"
     }
   }
 }

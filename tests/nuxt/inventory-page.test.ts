@@ -101,6 +101,53 @@ describe('inventory page', () => {
     expect(shown.text()).toContain('Sammlung: Box 1')
   })
 
+  function twoOwnedCards() {
+    return {
+      total: 2,
+      items: [
+        ownedDarkMagician().items[0]!,
+        ownedDarkMagician({ id: 'owned-2', cardName: 'Pot of Greed', cardNameDe: null, quantity: 1 }).items[0]!,
+      ],
+    }
+  }
+
+  it('moves some or all copies of a row to another collection', async () => {
+    inventoryState.pending = false
+    inventoryState.response = twoOwnedCards()
+
+    const component = await mountSuspended(InventoryPage)
+
+    // A row's own button opens the dialog for just that stack.
+    await component.find('button[aria-label="Dark Magician verschieben"]').trigger('click')
+    await nextTick()
+    expect(body().text()).toContain('Karten verschieben')
+    expect(body().text()).toContain('3 Kopien in (keine Sammlung)')
+    expect(body().find('input[name="quantity"]').exists()).toBe(true)
+  })
+
+  it('selects rows and moves the selection as whole stacks', async () => {
+    inventoryState.pending = false
+    inventoryState.response = twoOwnedCards()
+
+    const component = await mountSuspended(InventoryPage)
+
+    // "Auswählen" turns the rows into a selection.
+    expect(component.find('[aria-label="Dark Magician auswählen"]').exists()).toBe(false)
+    await component.findAll('button').find(button => button.text() === 'Auswählen')!.trigger('click')
+    const moveSelection = () => component.findAll('button').find(button => button.text().includes('In Sammlung verschieben'))!
+    expect(component.text()).toContain('0 Einträge ausgewählt')
+    expect(moveSelection().attributes('disabled')).toBeDefined()
+
+    await component.find('[aria-label="Dark Magician auswählen"]').trigger('click')
+    await component.find('[aria-label="Pot of Greed auswählen"]').trigger('click')
+    expect(component.text()).toContain('2 Einträge ausgewählt')
+
+    await moveSelection().trigger('click')
+    await nextTick()
+    expect(body().text()).toContain('2 Einträge, 4 Kopien')
+    expect(body().find('input[name="quantity"]').exists()).toBe(false)
+  })
+
   it('falls back to the English card text and cuts a long one with "…"', async () => {
     inventoryState.pending = false
     const long = 'A'.repeat(240)

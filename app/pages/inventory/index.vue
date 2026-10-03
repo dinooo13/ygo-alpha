@@ -3,6 +3,7 @@ import type { LocationQueryRaw } from 'vue-router'
 import { isCardKind } from '~~/shared/card-kind'
 import { UNASSIGNED_COLLECTION_ID } from '~~/shared/inventory'
 import type { InventorySearchFilters } from '~/components/inventory/InventorySearchPanel.vue'
+import type { MoveEntry } from '~/components/inventory/MoveCopiesModal.vue'
 import type { CardDetailPreview } from '~/utils/card-detail'
 import type { InventorySearchResultItem } from '~/utils/inventory-search-result'
 import { isPreviousHistoryEntry } from '~/utils/history-entry'
@@ -528,6 +529,55 @@ function openFromGallery(item: SearchResultItem) {
 function openFromList(item: InventoryItem) {
   openDetail({ cardId: item.catalogCardId, preview: previewFromListItem(item), focusRowId: item.id })
 }
+
+// --- Verschieben -------------------------------------------------------------
+// A "Liste" row moves some or all of its copies; "Auswählen" turns the list
+// into a selection whose whole stacks move together (`MoveCopiesModal`). The
+// selection holds the rows themselves, so it survives paging and a refresh.
+
+const isSelecting = ref(false)
+const selection = ref<Record<string, InventoryItem>>({})
+const selectedCount = computed(() => Object.keys(selection.value).length)
+const isMoveOpen = ref(false)
+const moveEntries = ref<MoveEntry[]>([])
+
+function moveEntryFor(item: InventoryItem): MoveEntry {
+  return {
+    ownedCardId: item.id,
+    name: cardName({ name: item.cardName, nameDe: item.cardNameDe }),
+    quantity: item.quantity,
+    collectionId: item.collectionId,
+  }
+}
+
+function openMove(entries: MoveEntry[]) {
+  moveEntries.value = entries
+  isMoveOpen.value = true
+}
+
+function toggleSelected(item: InventoryItem) {
+  const { [item.id]: removed, ...rest } = selection.value
+  selection.value = removed ? rest : { ...rest, [item.id]: item }
+}
+
+function selectPage() {
+  selection.value = { ...selection.value, ...Object.fromEntries(items.value.map(item => [item.id, item])) }
+}
+
+function stopSelecting() {
+  isSelecting.value = false
+  selection.value = {}
+}
+
+// The selection belongs to the scope it was made in.
+watch(collectionId, () => {
+  selection.value = {}
+})
+
+async function onMoved() {
+  stopSelecting()
+  await refreshAll()
+}
 </script>
 
 <template>
@@ -574,22 +624,34 @@ function openFromList(item: InventoryItem) {
           @deleted="onCollectionDeleted"
         />
 
-        <UFieldGroup>
+        <div class="flex flex-wrap items-center gap-2">
           <UButton
-            :label="t('inventory.view.list')"
-            :color="mode === 'list' ? 'primary' : 'neutral'"
-            :variant="mode === 'list' ? 'subtle' : 'outline'"
-            :aria-pressed="mode === 'list'"
-            @click="() => { mode = 'list' }"
+            v-if="mode === 'list'"
+            icon="i-lucide-list-checks"
+            color="neutral"
+            :variant="isSelecting ? 'subtle' : 'outline'"
+            :label="t('inventory.select.toggle')"
+            :aria-pressed="isSelecting"
+            @click="() => { isSelecting ? stopSelecting() : (isSelecting = true) }"
           />
-          <UButton
-            :label="t('inventory.view.gallery')"
-            :color="mode === 'gallery' ? 'primary' : 'neutral'"
-            :variant="mode === 'gallery' ? 'subtle' : 'outline'"
-            :aria-pressed="mode === 'gallery'"
-            @click="() => { mode = 'gallery' }"
-          />
-        </UFieldGroup>
+
+          <UFieldGroup>
+            <UButton
+              :label="t('inventory.view.list')"
+              :color="mode === 'list' ? 'primary' : 'neutral'"
+              :variant="mode === 'list' ? 'subtle' : 'outline'"
+              :aria-pressed="mode === 'list'"
+              @click="() => { mode = 'list' }"
+            />
+            <UButton
+              :label="t('inventory.view.gallery')"
+              :color="mode === 'gallery' ? 'primary' : 'neutral'"
+              :variant="mode === 'gallery' ? 'subtle' : 'outline'"
+              :aria-pressed="mode === 'gallery'"
+              @click="() => { mode = 'gallery' }"
+            />
+          </UFieldGroup>
+        </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-3">
@@ -714,6 +776,41 @@ function openFromList(item: InventoryItem) {
       v-else
       class="space-y-4"
     >
+      <div
+        v-if="isSelecting"
+        class="flex flex-wrap items-center justify-between gap-3 panel p-3"
+        role="region"
+        :aria-label="t('inventory.select.bar')"
+      >
+        <p
+          class="text-sm font-medium text-highlighted"
+          aria-live="polite"
+        >
+          {{ count('inventory.select.count', selectedCount) }}
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :label="t('inventory.select.page')"
+            :disabled="items.length === 0"
+            @click="selectPage"
+          />
+          <UButton
+            icon="i-lucide-folder-input"
+            :label="t('inventory.move.toCollection')"
+            :disabled="selectedCount === 0"
+            @click="() => openMove(Object.values(selection).map(moveEntryFor))"
+          />
+          <UButton
+            color="neutral"
+            variant="outline"
+            :label="t('common.cancel')"
+            @click="stopSelecting"
+          />
+        </div>
+      </div>
+
       <div class="panel overflow-hidden">
         <ul
           v-if="pending && items.length === 0"
@@ -777,7 +874,11 @@ function openFromList(item: InventoryItem) {
             :item="item"
             :collection-label="rowCollectionLabel(item)"
             :show-collection="!collectionId"
+            :selectable="isSelecting"
+            :selected="Boolean(selection[item.id])"
             @open="openFromList(item)"
+            @move="openMove([moveEntryFor(item)])"
+            @toggle="toggleSelected(item)"
           />
         </ul>
       </div>
@@ -803,6 +904,13 @@ function openFromList(item: InventoryItem) {
         <InventoryCatalogCardPicker @select="openAdd" />
       </template>
     </UModal>
+
+    <InventoryMoveCopiesModal
+      v-model:open="isMoveOpen"
+      :entries="moveEntries"
+      :collections="collectionOptions"
+      @moved="onMoved"
+    />
 
     <InventoryAddToInventoryModal
       v-model:open="isEntryOpen"

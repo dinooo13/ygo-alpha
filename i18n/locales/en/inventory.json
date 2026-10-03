@@ -90,6 +90,30 @@
         "title": "Remove from collection",
         "description": "Remove {name} from {collection}?"
       }
+    },
+    "select": {
+      "toggle": "Select",
+      "bar": "Selection",
+      "count": "{count} entry selected | {count} entries selected",
+      "page": "All on this page",
+      "row": "Select {name}"
+    },
+    "move": {
+      "title": "Move cards",
+      "single": "{count} copy in {collection} | {count} copies in {collection}",
+      "multiple": "{stacks} entries, {count} copy | {stacks} entries, {count} copies",
+      "selected": "Selected cards",
+      "quantity": "Quantity",
+      "decrease": "Move one copy fewer",
+      "increase": "Move one copy more",
+      "target": "Target collection",
+      "submit": "Move",
+      "toCollection": "Move to collection",
+      "rowAction": "Move {name}",
+      "staying": "{count} entry is already there and stays. | {count} entries are already there and stay.",
+      "alreadyThere": "These cards are already in this collection.",
+      "success": "Moved {count} copy to \"{collection}\" | Moved {count} copies to \"{collection}\"",
+      "failed": "The cards couldn't be moved."
     }
   }
 }

@@ -90,6 +90,30 @@
         "title": "Aus Sammlung entfernen",
         "description": "{name} aus {collection} entfernen?"
       }
+    },
+    "select": {
+      "toggle": "Auswählen",
+      "bar": "Auswahl",
+      "count": "{count} Eintrag ausgewählt | {count} Einträge ausgewählt",
+      "page": "Alle auf dieser Seite",
+      "row": "{name} auswählen"
+    },
+    "move": {
+      "title": "Karten verschieben",
+      "single": "{count} Kopie in {collection} | {count} Kopien in {collection}",
+      "multiple": "{stacks} Einträge, {count} Kopie | {stacks} Einträge, {count} Kopien",
+      "selected": "Ausgewählte Karten",
+      "quantity": "Anzahl",
+      "decrease": "Eine Kopie weniger verschieben",
+      "increase": "Eine Kopie mehr verschieben",
+      "target": "Ziel-Sammlung",
+      "submit": "Verschieben",
+      "toCollection": "In Sammlung verschieben",
+      "rowAction": "{name} verschieben",
+      "staying": "{count} Eintrag ist schon dort und bleibt. | {count} Einträge sind schon dort und bleiben.",
+      "alreadyThere": "Diese Karten sind schon in dieser Sammlung.",
+      "success": "{count} Kopie nach „{collection}“ verschoben | {count} Kopien nach „{collection}“ verschoben",
+      "failed": "Die Karten konnten nicht verschoben werden."
     }
   }
 }
