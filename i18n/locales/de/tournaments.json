@@ -3,6 +3,7 @@
     "noFormat": "Ohne Format",
     "noDeck": "Kein Deck",
     "dropped": "Ausgestiegen",
+    "withdrawn": "Aus der Wertung genommen",
     "backToList": "Zurück zu den Turnieren",
     "status": {
       "registration": "Anmeldung",
@@ -22,6 +23,33 @@
     "roundStatus": {
       "pending": "Offen",
       "completed": "Abgeschlossen"
+    },
+    "scoring": {
+      "games": {
+        "label": "Nach Spielen (3 · 2 · 1 · 0)",
+        "description": "Sieg ohne Spielverlust 3 Punkte, Sieg mit Spielverlust 2, Niederlage mit gewonnenem Spiel 1, sonst 0. Ein 2:0 steht damit über einem 2:1."
+      },
+      "match": {
+        "label": "Klassisch (3 · 0)",
+        "description": "Sieg 3 Punkte, Niederlage 0 – unabhängig vom Spielstand. (Unentschieden 1, nur in älteren Turnieren.)"
+      }
+    },
+    "byeScoring": {
+      "none": {
+        "label": "Keine Punkte",
+        "description": "Wer spielfrei hat, bekommt keine Punkte und kein gespieltes Match."
+      },
+      "win": {
+        "label": "Wie ein 2:0-Sieg",
+        "description": "Wer spielfrei hat, bekommt 3 Punkte wie nach einem 2:0-Sieg."
+      }
+    },
+    "scoringPanel": {
+      "title": "Wertung",
+      "scoring": "Punktevergabe",
+      "byeScoring": "Spielfrei",
+      "editHint": "Du kannst das ändern, solange das Turnier noch nicht gestartet ist.",
+      "saveFailed": "Die Wertung konnte nicht geändert werden."
     },
     "list": {
       "title": "Turniere",
@@ -69,6 +97,8 @@
       "descriptionAriaLabel": "Beschreibung",
       "format": "Format",
       "pairingSystem": "Paarungssystem",
+      "scoring": "Punktevergabe",
+      "byeScoring": "Spielfrei (bei ungerader Spielerzahl)",
       "plannedRounds": "Geplante Runden",
       "plannedRoundsPlaceholder": "Automatisch",
       "plannedRoundsRoundRobinHint": "Bei \"Jeder gegen jeden\" ergibt sich die Rundenzahl aus der Teilnehmerzahl.",
@@ -86,6 +116,9 @@
       "pairingSystem": "Paarungssystem: {name}",
       "notStarted": "Noch nicht gestartet",
       "roundProgress": "Runde {current} von {planned}",
+      "matchdayProgress": "Spieltag {current} von {planned}",
+      "scoring": "Wertung: {name}",
+      "byeScoring": "Spielfrei: {name}",
       "organizer": "Turnierleitung: {name}",
       "actions": {
         "start": "Turnier starten",
@@ -117,6 +150,10 @@
         "completeRoundFailed": "Die Runde konnte nicht abgeschlossen werden.",
         "finishFailed": "Das Turnier konnte nicht abgeschlossen werden.",
         "deleteFailed": "Das Turnier konnte nicht gelöscht werden."
+      },
+      "actionsRoundRobin": {
+        "completeRound": "Spieltag abschließen",
+        "nextRound": "Nächster Spieltag"
       }
     },
     "participants": {
@@ -151,12 +188,18 @@
       "menu": {
         "rename": "Umbenennen",
         "reinstate": "Zurückholen",
-        "drop": "Aussteigen lassen"
+        "drop": "Aussteigen lassen",
+        "withdraw": "Aus der Wertung nehmen",
+        "unwithdraw": "Wieder in die Wertung nehmen"
       },
       "confirm": {
         "remove": {
           "title": "Teilnehmer entfernen",
           "description": "{name} aus dem Turnier entfernen? Ein angemeldetes Deck geht dabei verloren."
+        },
+        "withdraw": {
+          "title": "Aus der Wertung nehmen",
+          "description": "{name} aus der Wertung nehmen? Alle Ergebnisse mit {name}, bisherige und künftige, zählen für niemanden mehr. Du kannst das rückgängig machen, solange das Turnier läuft."
         }
       },
       "rename": {
@@ -168,7 +211,8 @@
         "addFailed": "Der Teilnehmer konnte nicht hinzugefügt werden.",
         "renameFailed": "Der Teilnehmer konnte nicht umbenannt werden.",
         "dropFailed": "Der Status konnte nicht geändert werden.",
-        "removeFailed": "Der Teilnehmer konnte nicht entfernt werden."
+        "removeFailed": "Der Teilnehmer konnte nicht entfernt werden.",
+        "withdrawFailed": "Die Wertung konnte nicht geändert werden."
       }
     },
     "deckRegistration": {
@@ -193,11 +237,14 @@
         "title": "Paarung wiederholen?",
         "description": "Diese Paarung gab es bereits. Trotzdem tauschen?"
       },
-      "swapFailed": "Diese Paarungen konnten nicht getauscht werden."
+      "swapFailed": "Diese Paarungen konnten nicht getauscht werden.",
+      "titleRoundRobin": "Spieltage",
+      "emptyRoundRobin": "Es wurde noch kein Spieltag gespielt.",
+      "matchday": "Spieltag {number}"
     },
     "match": {
       "table": "Tisch {number}",
-      "bye": "Freilos",
+      "bye": "Spielfrei",
       "byeScore": "Gewertet als {score}",
       "versus": "vs.",
       "draw": "Unentschieden",
@@ -206,7 +253,11 @@
       "saveResult": "Ergebnis speichern",
       "enterResultFirst": "Trage zuerst ein Ergebnis ein",
       "gamesOf": "Spiele {name}",
-      "saveFailed": "Das Ergebnis konnte nicht gespeichert werden."
+      "saveFailed": "Das Ergebnis konnte nicht gespeichert werden.",
+      "byeNoPoints": "ohne Wertung",
+      "winBy": "{name} gewinnt {score}",
+      "voided": "Zählt nicht",
+      "notPlayed": "Nicht gespielt"
     },
     "standings": {
       "title": "Tabelle",
@@ -215,7 +266,16 @@
       "columns": {
         "rank": "Platz",
         "player": "Spieler",
-        "points": "Punkte"
+        "points": "Punkte",
+        "position": "Pl.",
+        "name": "Name",
+        "played": "Sp.",
+        "wins": "S",
+        "draws": "U",
+        "losses": "N",
+        "games": "Spiele",
+        "difference": "Diff.",
+        "pointsShort": "Pkt."
       },
       "record": "S-N-U",
       "recordTitle": "Siege–Niederlagen–Unentschieden",
@@ -227,7 +287,33 @@
       "ogwTitle": "Spielquote der Gegner",
       "pointsShort": "Pkt.",
       "rate": "{value} %",
-      "legend": "Punkte: Sieg {win}, Unentschieden {draw} · S-N-U = Siege–Niederlagen–Unentschieden · OMW% = Siegquote der Gegner · GW% = eigene Spielquote · OGW% = Spielquote der Gegner"
+      "titleLeague": "Tabelle",
+      "recordWinLoss": "S-N",
+      "recordWinLossTitle": "Siege–Niederlagen",
+      "league": {
+        "playedTitle": "Gespielte Begegnungen",
+        "winsTitle": "Siege",
+        "drawsTitle": "Unentschieden",
+        "lossesTitle": "Niederlagen",
+        "gamesTitle": "Gewonnene : verlorene Spiele",
+        "differenceTitle": "Spieldifferenz",
+        "pointsTitle": "Punkte"
+      },
+      "withdrawnRank": "–",
+      "legendMatch": "Punkte: Sieg {win}, Unentschieden {draw} · S-N-U = Siege–Niederlagen–Unentschieden · OMW% = Siegquote der Gegner · GW% = eigene Spielquote · OGW% = Spielquote der Gegner",
+      "legendGames": "Punkte: Sieg ohne Spielverlust {win}, Sieg mit Spielverlust {narrowWin}, Niederlage mit gewonnenem Spiel {narrowLoss}, sonst 0 · S-N = Siege–Niederlagen · OMW% = Siegquote der Gegner · GW% = eigene Spielquote · OGW% = Spielquote der Gegner",
+      "legendLeague": "Sp. = gespielte Begegnungen · S = Siege · N = Niederlagen · Spiele = gewonnene : verlorene Spiele · Diff. = Spieldifferenz · Pkt. = Punkte (Sieg ohne Spielverlust {win}, Sieg mit Spielverlust {narrowWin}, Niederlage mit gewonnenem Spiel {narrowLoss}, sonst 0). Reihenfolge bei Gleichstand: Punkte, Spieldifferenz, direkter Vergleich (bei genau zwei Spielern), gewonnene Spiele, Setzung.",
+      "legendLeagueMatch": "Sp. = gespielte Begegnungen · S = Siege · U = Unentschieden · N = Niederlagen · Spiele = gewonnene : verlorene Spiele · Diff. = Spieldifferenz · Pkt. = Punkte (Sieg {win}, Unentschieden {draw}). Reihenfolge bei Gleichstand: Punkte, Spieldifferenz, direkter Vergleich (bei genau zwei Spielern), gewonnene Spiele, Setzung.",
+      "legendWithdrawn": "Aus der Wertung genommene Spieler stehen am Ende; keines ihrer Matches zählt für irgendjemanden.",
+      "view": {
+        "label": "Ansicht",
+        "table": "Tabelle",
+        "crosstable": "Kreuztabelle"
+      },
+      "crosstable": {
+        "caption": "Ergebnisse aus Sicht der Zeile: Spiele der Zeile : Spiele der Spalte.",
+        "ariaLabel": "Kreuztabelle der Ergebnisse"
+      }
     }
   }
 }

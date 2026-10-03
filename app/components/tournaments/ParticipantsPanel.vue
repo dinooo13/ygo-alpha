@@ -148,6 +148,40 @@ async function setDropped(participant: TournamentParticipantDto, dropped: boolea
 
 const { confirm } = useConfirm()
 
+/**
+ * "Aus der Wertung nehmen" (ADR 0028): unlike dropping, this voids every
+ * match with the participant for everybody's standings — so taking someone
+ * out asks first; putting them back is harmless and does not.
+ */
+async function setWithdrawn(participant: TournamentParticipantDto, withdrawn: boolean) {
+  if (withdrawn) {
+    const confirmed = await confirm({
+      title: t('tournaments.participants.confirm.withdraw.title'),
+      description: t('tournaments.participants.confirm.withdraw.description', { name: participant.name }),
+    })
+    if (!confirmed) {
+      return
+    }
+  }
+
+  busyParticipantId.value = participant.id
+  rowError.value = ''
+
+  try {
+    const detail = await $fetch<TournamentDetail>(
+      `/api/tournaments/${props.tournament.id}/participants/${participant.id}`,
+      { method: 'PATCH', body: { withdrawn } },
+    )
+    emit('updated', detail)
+  }
+  catch (error) {
+    rowError.value = apiError(error, 'tournaments.participants.errors.withdrawFailed')
+  }
+  finally {
+    busyParticipantId.value = null
+  }
+}
+
 async function removeParticipant(participant: TournamentParticipantDto) {
   // Destructive and irreversible — a registered deck is lost with the row —
   // so it gets the same confirm as every other destructive action in the
@@ -195,6 +229,11 @@ function menuItemsFor(participant: TournamentParticipantDto) {
       label: participant.dropped ? t('tournaments.participants.menu.reinstate') : t('tournaments.participants.menu.drop'),
       icon: participant.dropped ? 'i-lucide-undo-2' : 'i-lucide-user-x',
       onSelect: () => setDropped(participant, !participant.dropped),
+    })
+    items.push({
+      label: participant.withdrawn ? t('tournaments.participants.menu.unwithdraw') : t('tournaments.participants.menu.withdraw'),
+      icon: participant.withdrawn ? 'i-lucide-undo-2' : 'i-lucide-eye-off',
+      onSelect: () => setWithdrawn(participant, !participant.withdrawn),
     })
   }
 
@@ -498,6 +537,13 @@ function capturedAtLabel(participant: TournamentParticipantDto): string | null {
                   color="neutral"
                   variant="subtle"
                   :label="t('tournaments.dropped')"
+                />
+                <UBadge
+                  v-if="participant.withdrawn"
+                  size="sm"
+                  color="neutral"
+                  variant="subtle"
+                  :label="t('tournaments.withdrawn')"
                 />
               </div>
             </td>

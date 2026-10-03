@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { BYE_GAMES, MAX_GAMES_PER_MATCH } from '~~/shared/tournaments'
-import type { TournamentDetail, TournamentMatchDto } from '~~/shared/tournaments'
+import type { ByeScoring, TournamentDetail, TournamentMatchDto } from '~~/shared/tournaments'
 
 const props = defineProps<{
   match: TournamentMatchDto
   tournamentId: string
+  byeScoring: ByeScoring
+  /** Ids of participants taken out of the standings, to flag them in a void match. */
+  withdrawnIds: string[]
   /** Organizer, tournament running, and the match's round is still pending. */
   canEdit: boolean
   swapMode: boolean
@@ -64,17 +67,36 @@ function saveForm() {
 }
 
 /**
- * A fresh, never-touched form starts at 0:0 — "Ergebnis speichern" being
- * active right away lets a stray click record a false draw and hand both
- * players a point (#33). Disable it until at least one field has moved away
- * from that starting value; the quick buttons (2:0 / 0:2 / Unentschieden)
- * remain the normal way to report a result and are never gated by this.
+ * A match always has a winner (ADR 0028), so equal game counts cannot be
+ * saved: that covers the fresh, never-touched 0:0 form (#33) as well as 1:1.
+ * The server rejects them too (`draws_not_allowed`); the quick buttons below
+ * are the normal way to report a result and are never gated by this.
  */
-const isUntouchedZeroZero = computed(() => {
+const isTie = computed(() => {
   const a = typeof gamesA.value === 'number' ? gamesA.value : 0
   const b = typeof gamesB.value === 'number' ? gamesB.value : 0
-  return a === 0 && b === 0
+  return a === b
 })
+const isUntouchedZeroZero = computed(() => isTie.value && !gamesA.value && !gamesB.value)
+const saveTitle = computed(() => {
+  if (!isTie.value) {
+    return undefined
+  }
+  return isUntouchedZeroZero.value ? t('tournaments.match.enterResultFirst') : t('errors.api.draws_not_allowed')
+})
+
+/** The quick buttons: A wins 2:0 / 2:1, then B wins 1:2 / 0:2 (scores always read A:B). */
+const quickScores = {
+  a: [[2, 0], [2, 1]],
+  b: [[1, 2], [0, 2]],
+} as const
+
+const withdrawnA = computed(() => props.withdrawnIds.includes(props.match.participantAId))
+const withdrawnB = computed(() => props.match.participantBId !== null && props.withdrawnIds.includes(props.match.participantBId))
+
+function sideName(side: 'a' | 'b'): string {
+  return side === 'a' ? props.match.participantAName : (props.match.participantBName ?? '')
+}
 
 const winnerName = computed(() => {
   if (props.match.winnerParticipantId === props.match.participantAId) {
@@ -90,7 +112,9 @@ const resultLabel = computed(() => (props.match.isDraw
   ? t('tournaments.match.draw')
   : t('tournaments.match.win', { name: winnerName.value ?? '' })))
 
-const byeScore = computed(() => t('tournaments.match.byeScore', { score: `${BYE_GAMES}:0` }))
+const byeScore = computed(() => props.byeScoring === 'win'
+  ? t('tournaments.match.byeScore', { score: `${BYE_GAMES}:0` })
+  : t('tournaments.match.byeNoPoints'))
 
 function onChipClick(slot: 'a' | 'b') {
   if (!props.swapMode) {
@@ -125,6 +149,13 @@ function onChipClick(slot: 'a' | 'b') {
       >
         {{ match.participantAName }}
       </span>
+      <UBadge
+        v-if="withdrawnA"
+        size="sm"
+        color="neutral"
+        variant="subtle"
+        :label="t('tournaments.withdrawn')"
+      />
 
       <template v-if="match.isBye">
         <UBadge
@@ -151,11 +182,42 @@ function onChipClick(slot: 'a' | 'b') {
         >
           {{ match.participantBName }}
         </span>
+        <UBadge
+          v-if="withdrawnB"
+          size="sm"
+          color="neutral"
+          variant="subtle"
+          :label="t('tournaments.withdrawn')"
+        />
+      </template>
+    </div>
+
+    <!-- A match with a withdrawn player is not scored (ADR 0028): an unplayed
+         one reads "spielfrei" for the opponent and needs no result. -->
+    <div
+      v-if="match.voided"
+      class="flex flex-wrap items-center gap-2"
+    >
+      <template v-if="match.reported">
+        <span class="font-numeric text-base font-bold tracking-[0.04em] text-muted tabular-nums">{{ match.gamesA }}:{{ match.gamesB }}</span>
+        <UBadge
+          color="neutral"
+          variant="subtle"
+          :label="t('tournaments.match.voided')"
+        />
+      </template>
+      <template v-else>
+        <UBadge
+          color="neutral"
+          variant="subtle"
+          :label="t('tournaments.match.bye')"
+        />
+        <span class="text-xs text-muted">{{ t('tournaments.match.notPlayed') }}</span>
       </template>
     </div>
 
     <div
-      v-if="!match.isBye"
+      v-else-if="!match.isBye"
       class="flex flex-wrap items-center gap-2"
     >
       <template v-if="match.reported && !isEditing">
@@ -182,27 +244,21 @@ function onChipClick(slot: 'a' | 'b') {
            that wrap independently, so the 44px touch targets (#28) stack
            into two tidy lines on a phone instead of one ragged one. -->
       <template v-else-if="canEdit">
-        <div class="flex w-full flex-wrap gap-2 sm:w-auto">
+        <div
+          v-for="side in (['a', 'b'] as const)"
+          :key="side"
+          class="flex flex-wrap items-center gap-2 max-sm:w-full"
+        >
+          <span class="max-w-32 truncate text-xs text-muted">{{ t('tournaments.match.win', { name: sideName(side) }) }}</span>
           <UButton
+            v-for="[scoreA, scoreB] in quickScores[side]"
+            :key="`${scoreA}:${scoreB}`"
             size="xs"
-            label="2:0"
+            :label="`${scoreA}:${scoreB}`"
+            :aria-label="t('tournaments.match.winBy', { name: sideName(side), score: `${scoreA}:${scoreB}` })"
             class="tap-target max-sm:flex-auto"
             :loading="isSubmitting"
-            @click="submitResult(2, 0)"
-          />
-          <UButton
-            size="xs"
-            label="0:2"
-            class="tap-target max-sm:flex-auto"
-            :loading="isSubmitting"
-            @click="submitResult(0, 2)"
-          />
-          <UButton
-            size="xs"
-            :label="t('tournaments.match.draw')"
-            class="tap-target max-sm:flex-auto"
-            :loading="isSubmitting"
-            @click="submitResult(1, 1)"
+            @click="submitResult(scoreA, scoreB)"
           />
         </div>
 
@@ -234,8 +290,8 @@ function onChipClick(slot: 'a' | 'b') {
             variant="outline"
             :label="t('tournaments.match.saveResult')"
             class="tap-target"
-            :disabled="isUntouchedZeroZero"
-            :title="isUntouchedZeroZero ? t('tournaments.match.enterResultFirst') : undefined"
+            :disabled="isTie"
+            :title="saveTitle"
             :loading="isSubmitting"
             @click="saveForm"
           />

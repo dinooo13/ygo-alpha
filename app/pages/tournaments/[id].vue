@@ -119,11 +119,13 @@ const STATUS_COLORS: Record<TournamentStatus, 'info' | 'warning' | 'neutral'> = 
   finished: 'neutral',
 }
 
+const isRoundRobin = computed(() => tournament.value?.pairingSystem === 'round_robin')
+
 const roundProgress = computed(() => {
   if (!tournament.value) {
     return ''
   }
-  return t('tournaments.detail.roundProgress', {
+  return t(isRoundRobin.value ? 'tournaments.detail.matchdayProgress' : 'tournaments.detail.roundProgress', {
     current: n(tournament.value.rounds.length, 'integer'),
     planned: tournament.value.plannedRounds === null ? '–' : n(tournament.value.plannedRounds, 'integer'),
   })
@@ -262,6 +264,12 @@ const actionHint = computed(() => {
           <div>
             {{ t('tournaments.detail.pairingSystem', { name: t(`tournaments.pairingSystem.${tournament.pairingSystem}.label`) }) }}
           </div>
+          <div>
+            {{ t('tournaments.detail.scoring', { name: t(`tournaments.scoring.${tournament.scoring}.label`) }) }}
+          </div>
+          <div>
+            {{ t('tournaments.detail.byeScoring', { name: t(`tournaments.byeScoring.${tournament.byeScoring}.label`) }) }}
+          </div>
           <div v-if="tournament.rounds.length === 0">
             {{ t('tournaments.detail.notStarted') }}
           </div>
@@ -288,7 +296,7 @@ const actionHint = computed(() => {
               </template>
               <template v-else-if="tournament.status === 'running'">
                 <UButton
-                  :label="t('tournaments.detail.actions.completeRound')"
+                  :label="isRoundRobin ? t('tournaments.detail.actionsRoundRobin.completeRound') : t('tournaments.detail.actions.completeRound')"
                   :color="primaryRunningAction === 'complete' ? 'primary' : 'neutral'"
                   :variant="primaryRunningAction === 'complete' ? 'solid' : 'outline'"
                   :disabled="!tournament.canCompleteRound || busy"
@@ -296,7 +304,7 @@ const actionHint = computed(() => {
                   @click="completeRound"
                 />
                 <UButton
-                  :label="t('tournaments.detail.actions.nextRound')"
+                  :label="isRoundRobin ? t('tournaments.detail.actionsRoundRobin.nextRound') : t('tournaments.detail.actions.nextRound')"
                   :color="primaryRunningAction === 'next' ? 'primary' : 'neutral'"
                   :variant="primaryRunningAction === 'next' ? 'solid' : 'outline'"
                   :disabled="!tournament.canCreateRound || busy"
@@ -353,8 +361,13 @@ const actionHint = computed(() => {
       <!-- Once finished, the final table is what people come for — lead with it. -->
       <TournamentsStandingsTable
         v-if="tournament.status === 'finished'"
-        :standings="tournament.standings"
-        :status="tournament.status"
+        :tournament="tournament"
+      />
+
+      <TournamentsScoringPanel
+        v-if="tournament.role === 'organizer' && tournament.status === 'registration'"
+        :tournament="tournament"
+        @updated="onUpdated"
       />
 
       <TournamentsParticipantsPanel
@@ -369,8 +382,7 @@ const actionHint = computed(() => {
 
       <TournamentsStandingsTable
         v-if="tournament.status !== 'finished'"
-        :standings="tournament.standings"
-        :status="tournament.status"
+        :tournament="tournament"
       />
     </template>
   </div>

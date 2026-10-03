@@ -40,6 +40,7 @@ function participant(overrides: Partial<TournamentParticipantDto> = {}): Tournam
     linked: true,
     isSelf: true,
     dropped: false,
+    withdrawn: false,
     seed: 1,
     deckId: null,
     deckName: null,
@@ -66,6 +67,7 @@ function match(overrides: Partial<TournamentMatchDto> = {}): TournamentMatchDto 
     gamesB: 0,
     isDraw: false,
     isBye: false,
+    voided: false,
     reported: false,
     reportedAt: null,
     ...overrides,
@@ -101,6 +103,7 @@ function standing(overrides: Partial<TournamentStandingRow> = {}): TournamentSta
     opponentMatchWinRate: 0.6667,
     opponentGameWinRate: 0.6,
     dropped: false,
+    withdrawn: false,
     name: 'Organizer',
     ...overrides,
   }
@@ -113,6 +116,10 @@ function tournamentDetail(overrides: Partial<TournamentDetail> = {}): Tournament
     description: null,
     status: 'registration',
     pairingSystem: 'swiss',
+    // The fixtures model a tournament created before ADR 0028; the games-scoring
+    // and league tests below override these.
+    scoring: 'match',
+    byeScoring: 'win',
     plannedRounds: null,
     format: null,
     organizerName: 'Organizer',
@@ -388,7 +395,8 @@ describe('tournament detail page — organizer, running', () => {
 
     const component = await mountSuspended(TournamentDetailPage)
 
-    expect(component.text()).toContain('Freilos')
+    expect(component.text()).toContain('Spielfrei')
+    expect(component.text()).toContain('Gewertet als 2:0')
     expect(component.find('[aria-label="Spiele Organizer"]').exists()).toBe(false)
   })
 })
@@ -651,7 +659,6 @@ describe('tournament detail page — English', () => {
     await setTestLocale('en')
     state.tournament = tournamentDetail({
       status: 'running',
-      pairingSystem: 'round_robin',
       plannedRounds: 3,
       format: { id: 'advanced', name: 'Advanced', isBuiltin: true },
       participants: [
@@ -678,7 +685,7 @@ describe('tournament detail page — English', () => {
 
     expect(text).toContain('Back to tournaments')
     expect(text).toContain('Running')
-    expect(text).toContain('Pairing system: Round robin')
+    expect(text).toContain('Pairing system: Swiss')
     expect(text).toContain('Round 1 of 3')
     expect(text).toContain('Organizer: Organizer')
     expect(text).toContain('Complete round')
@@ -719,5 +726,219 @@ describe('tournament detail page — English', () => {
     expect(component.findAll('p').some(p => p.text() === 'At least 2 participants needed')).toBe(true)
     expect(component.text()).toContain('No format')
     expect(component.text()).toContain('Not started yet')
+  })
+})
+
+describe('tournament detail page — scoring, results and league table (ADR 0028)', () => {
+  const alice = participant({ id: 'p-2', name: 'Alice', isSelf: false })
+
+  function runningDetail(overrides: Partial<TournamentDetail> = {}): TournamentDetail {
+    return tournamentDetail({
+      status: 'running',
+      scoring: 'games',
+      byeScoring: 'none',
+      plannedRounds: 3,
+      participants: [participant(), alice],
+      rounds: [round()],
+      currentRound: round(),
+      standings: [
+        standing({ points: 2, wins: 1, losses: 0 }),
+        standing({ participantId: 'p-2', rank: 2, name: 'Alice', points: 1, wins: 0, losses: 1, gamesWon: 1, gamesLost: 2 }),
+      ],
+      ...overrides,
+    })
+  }
+
+  it('shows the scoring on the detail page and offers all four best-of-3 results, no draw', async () => {
+    state.tournament = runningDetail()
+
+    const component = await mountSuspended(TournamentDetailPage)
+    const text = component.text()
+
+    expect(text).toContain('Wertung: Nach Spielen (3 · 2 · 1 · 0)')
+    expect(text).toContain('Spielfrei: Keine Punkte')
+
+    const buttons = component.findAll('button')
+    expect(buttons.map(button => button.text()).filter(label => /^\d:\d$/.test(label))).toEqual(['2:0', '2:1', '1:2', '0:2'])
+    expect(buttons.some(button => button.text() === 'Unentschieden')).toBe(false)
+    // Each quick result names the winning side.
+    expect(component.find('button[aria-label="Organizer gewinnt 2:1"]').exists()).toBe(true)
+    expect(component.find('button[aria-label="Alice gewinnt 1:2"]').exists()).toBe(true)
+  })
+
+  it('keeps "Ergebnis speichern" disabled for equal game counts', async () => {
+    state.tournament = runningDetail()
+
+    const component = await mountSuspended(TournamentDetailPage)
+    const save = () => component.findAll('button').find(button => button.text() === 'Ergebnis speichern')!
+    expect(save().attributes('disabled')).toBeDefined()
+
+    await component.find('[aria-label="Spiele Organizer"]').setValue('1')
+    await component.find('[aria-label="Spiele Alice"]').setValue('1')
+    expect(save().attributes('disabled')).toBeDefined()
+    expect(save().attributes('title')).toBe(component.vm.$t('errors.api.draws_not_allowed'))
+
+    await component.find('[aria-label="Spiele Alice"]').setValue('2')
+    expect(save().attributes('disabled')).toBeUndefined()
+  })
+
+  it('shows the games-scoring legend and S-N (no draws) for a Swiss tournament', async () => {
+    state.tournament = runningDetail()
+
+    const component = await mountSuspended(TournamentDetailPage)
+    const text = component.text()
+
+    expect(text).toContain('Punkte: Sieg ohne Spielverlust 3, Sieg mit Spielverlust 2, Niederlage mit gewonnenem Spiel 1, sonst 0')
+    expect(component.find('abbr[title="Siege–Niederlagen"]').exists()).toBe(true)
+    expect(text).toContain('OMW%')
+  })
+
+  it('shows a bye without points as spielfrei, and a withdrawn player\'s match without inputs', async () => {
+    const bye = match({
+      id: 'm-bye',
+      tableNumber: 2,
+      participantAId: 'p-3',
+      participantAName: 'Carla',
+      participantBId: null,
+      participantBName: null,
+      isBye: true,
+      reported: true,
+      reportedAt: '2025-01-03T00:00:00.000Z',
+    })
+    const voided = match({ id: 'm-void', voided: true })
+    state.tournament = runningDetail({
+      participants: [participant(), participant({ id: 'p-2', name: 'Alice', isSelf: false, withdrawn: true })],
+      rounds: [round({ matches: [voided, bye] })],
+      currentRound: round({ matches: [voided, bye] }),
+      canCompleteRound: true,
+    })
+
+    const component = await mountSuspended(TournamentDetailPage)
+    const rows = component.findAll('[data-testid="match-row"]')
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0]!.text()).toContain('Aus der Wertung genommen')
+    expect(rows[0]!.text()).toContain('Spielfrei')
+    expect(rows[0]!.findAll('button')).toHaveLength(0)
+    expect(rows[1]!.text()).toContain('Spielfrei')
+    expect(rows[1]!.text()).toContain('ohne Wertung')
+    expect(rows[1]!.text()).not.toContain('Gewertet als')
+  })
+
+  it('offers "Aus der Wertung nehmen" next to dropping, for a running tournament', async () => {
+    state.tournament = runningDetail()
+
+    const component = await mountSuspended(TournamentDetailPage)
+    const trigger = component.find('button[aria-label="Optionen für Alice"]')
+    await trigger.trigger('click')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('Aus der Wertung nehmen')
+    expect(document.body.textContent).toContain('Aussteigen lassen')
+  })
+
+  it('lists a withdrawn player last, without a place, marked as taken out of the standings', async () => {
+    state.tournament = runningDetail({
+      pairingSystem: 'round_robin',
+      participants: [participant(), participant({ id: 'p-2', name: 'Alice', isSelf: false, withdrawn: true })],
+      standings: [
+        standing(),
+        standing({ participantId: 'p-2', rank: 2, name: 'Alice', points: 0, matchesPlayed: 0, wins: 0, gamesWon: 0, gamesLost: 0, withdrawn: true }),
+      ],
+    })
+
+    const component = await mountSuspended(TournamentDetailPage)
+    const rows = component.findAll('[data-testid="standings-row"]')
+
+    expect(rows).toHaveLength(2)
+    expect(rows[1]!.text()).toContain('Alice')
+    expect(rows[1]!.text()).toContain('Aus der Wertung genommen')
+    expect(rows[1]!.text()).toContain('–')
+    expect(rows[0]!.text()).not.toContain('Aus der Wertung genommen')
+    expect(component.text()).toContain('Aus der Wertung genommene Spieler stehen am Ende')
+  })
+
+  it('renders a round robin as a league table with Spieltage and no pairing swap', async () => {
+    state.tournament = runningDetail({
+      pairingSystem: 'round_robin',
+      canEditPairings: false,
+      standings: [
+        standing({ matchesPlayed: 2, wins: 2, losses: 0, points: 5, gamesWon: 4, gamesLost: 1 }),
+        standing({ participantId: 'p-2', rank: 2, name: 'Alice', matchesPlayed: 2, wins: 0, losses: 2, points: 2, gamesWon: 1, gamesLost: 4 }),
+      ],
+    })
+
+    const component = await mountSuspended(TournamentDetailPage)
+    const text = component.text()
+
+    const leagueTable = component.find('[data-testid="standings-row"]').element.closest('table')!
+    const headers = [...leagueTable.querySelectorAll('th')].map(th => th.textContent?.trim())
+    expect(headers).toEqual(['Pl.', 'Name', 'Sp.', 'S', 'N', 'Spiele', 'Diff.', 'Pkt.'])
+    const cells = component.findAll('[data-testid="standings-row"]')[0]!.findAll('td').map(td => td.text())
+    expect(cells.slice(2)).toEqual(['2', '2', '0', '4:1', '+3', '5'])
+    expect(component.findAll('[data-testid="standings-row"]')[1]!.findAll('td').map(td => td.text()).slice(5, 7)).toEqual(['1:4', '-3'])
+
+    expect(text).not.toContain('OMW%')
+    expect(text).not.toContain('GW%')
+    expect(text).toContain('Spieltag 1')
+    expect(text).toContain('Spieltag 1 von 3')
+    expect(text).toContain('Spieltage')
+    expect(component.findAll('button').some(button => button.text() === 'Spieltag abschließen')).toBe(true)
+    expect(text).not.toContain('Paarungen tauschen')
+    expect(text).toContain('Diff. = Spieldifferenz')
+  })
+
+  it('switches a round robin to the crosstable', async () => {
+    const played = match({
+      reported: true,
+      reportedAt: '2025-01-03T00:00:00.000Z',
+      winnerParticipantId: 'p-1',
+      gamesA: 2,
+      gamesB: 1,
+    })
+    state.tournament = runningDetail({
+      pairingSystem: 'round_robin',
+      rounds: [round({ matches: [played], status: 'completed' })],
+      currentRound: null,
+    })
+
+    const component = await mountSuspended(TournamentDetailPage)
+    const crosstableButton = component.findAll('button').find(button => button.text() === 'Kreuztabelle')!
+    await crosstableButton.trigger('click')
+
+    const table = component.find('table[aria-label="Kreuztabelle der Ergebnisse"]')
+    expect(table.exists()).toBe(true)
+    const rows = table.findAll('tbody tr')
+    expect(rows[0]!.findAll('td').map(td => td.text())).toEqual(['·', '2:1'])
+    expect(rows[1]!.findAll('td').map(td => td.text())).toEqual(['1:2', '·'])
+  })
+
+  it('lets the organizer pick the scoring while registering, but nobody else and not once started', async () => {
+    state.tournament = tournamentDetail({ scoring: 'games', byeScoring: 'none' })
+    const registering = await mountSuspended(TournamentDetailPage)
+    expect(registering.find('select[aria-label="Punktevergabe"], button[aria-label="Punktevergabe"]').exists()).toBe(true)
+    expect(registering.text()).toContain('Wertung')
+    expect(registering.text()).toContain('Du kannst das ändern, solange das Turnier noch nicht gestartet ist.')
+
+    state.tournament = tournamentDetail({ role: 'participant', scoring: 'games', byeScoring: 'none' })
+    const asParticipant = await mountSuspended(TournamentDetailPage)
+    expect(asParticipant.text()).not.toContain('Du kannst das ändern, solange das Turnier noch nicht gestartet ist.')
+
+    state.tournament = runningDetail()
+    const running = await mountSuspended(TournamentDetailPage)
+    expect(running.text()).not.toContain('Du kannst das ändern, solange das Turnier noch nicht gestartet ist.')
+  })
+
+  it('keeps the draw label for a legacy draw result', async () => {
+    const draw = match({ reported: true, reportedAt: '2025-01-03T00:00:00.000Z', isDraw: true, gamesA: 1, gamesB: 1 })
+    state.tournament = runningDetail({
+      scoring: 'match',
+      byeScoring: 'win',
+      rounds: [round({ matches: [draw] })],
+      currentRound: round({ matches: [draw] }),
+    })
+
+    const component = await mountSuspended(TournamentDetailPage)
+    expect(component.find('[data-testid="match-row"]').text()).toContain('Unentschieden')
   })
 })
