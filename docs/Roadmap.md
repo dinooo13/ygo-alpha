@@ -331,7 +331,7 @@ live standings with OMW%/GW%/OGW% tiebreakers, and a history of finished tournam
 [`docs/adr/0008-tournament-model.md`](adr/0008-tournament-model.md).
 
 Tester-Feedback Sept 2026 (done, see
-[`docs/adr/0028-tournament-league-scoring.md`](adr/0028-tournament-league-scoring.md)):
+[`docs/adr/0031-tournament-league-scoring.md`](adr/0031-tournament-league-scoring.md)):
 
 - [x] no draws; quick results 2:0, 2:1, 1:2, 0:2
 - [x] scoring by games per tournament (2:0 ranks above 2:1), classic 3/0 kept for existing tournaments

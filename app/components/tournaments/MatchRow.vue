@@ -67,7 +67,7 @@ function saveForm() {
 }
 
 /**
- * A match always has a winner (ADR 0028), so equal game counts cannot be
+ * A match always has a winner (ADR 0031), so equal game counts cannot be
  * saved: that covers the fresh, never-touched 0:0 form (#33) as well as 1:1.
  * The server rejects them too (`draws_not_allowed`); the quick buttons below
  * are the normal way to report a result and are never gated by this.
@@ -192,7 +192,7 @@ function onChipClick(slot: 'a' | 'b') {
       </template>
     </div>
 
-    <!-- A match with a withdrawn player is not scored (ADR 0028): an unplayed
+    <!-- A match with a withdrawn player is not scored (ADR 0031): an unplayed
          one reads "spielfrei" for the opponent and needs no result. -->
     <div
       v-if="match.voided"

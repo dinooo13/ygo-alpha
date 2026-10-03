@@ -1,4 +1,4 @@
-# 0028: Tournament scoring, byes, no draws, league tables and withdrawing
+# 0031: Tournament scoring, byes, no draws, league tables and withdrawing
 
 ## Status
 

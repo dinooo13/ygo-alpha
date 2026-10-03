@@ -25,17 +25,17 @@ export const PAIRING_SYSTEMS = ['swiss', 'round_robin'] as const
 export type PairingSystem = typeof PAIRING_SYSTEMS[number]
 
 /**
- * How a match is turned into points (ADR 0028). `games`: 3 for a win without
+ * How a match is turned into points (ADR 0031). `games`: 3 for a win without
  * dropping a game, 2 for a win that dropped one, 1 for a loss that won a game,
  * 0 otherwise — so a 2:0 outranks a 2:1. `match`: classic 3 / 0 (1 for a
- * draw); what tournaments created before ADR 0028 keep.
+ * draw); what tournaments created before ADR 0031 keep.
  */
 export const SCORING_SYSTEMS = ['games', 'match'] as const
 export type ScoringSystem = typeof SCORING_SYSTEMS[number]
 
 /**
  * What a bye is worth. `none`: nothing — no points, no match played, no games.
- * `win`: scored as a 2:0 win (the behavior before ADR 0028).
+ * `win`: scored as a 2:0 win (the behavior before ADR 0031).
  */
 export const BYE_SCORINGS = ['none', 'win'] as const
 export type ByeScoring = typeof BYE_SCORINGS[number]
@@ -126,7 +126,7 @@ export interface TournamentParticipantDto {
   /** Left the tournament; past results count, no further pairings. */
   dropped: boolean
   /**
-   * Taken out of the standings by the organizer (ADR 0028): none of this
+   * Taken out of the standings by the organizer (ADR 0031): none of this
    * participant's matches count for anybody, and they are listed last.
    */
   withdrawn: boolean
@@ -156,7 +156,7 @@ export interface TournamentMatchDto {
   winnerParticipantId: string | null
   gamesA: number
   gamesB: number
-  /** Only legacy results: new results are never draws (ADR 0028). */
+  /** Only legacy results: new results are never draws (ADR 0031). */
   isDraw: boolean
   isBye: boolean
   /**

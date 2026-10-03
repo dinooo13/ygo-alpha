@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — partially superseded by [0028](0028-tournament-league-scoring.md):
+Accepted — partially superseded by [0031](0031-tournament-league-scoring.md):
 the 3/1/0 match points (decision 5), draws and the auto-reported 2–0 bye
 (decision 6), and pairing swaps in every pairing system are replaced there.
 Everything else stands.

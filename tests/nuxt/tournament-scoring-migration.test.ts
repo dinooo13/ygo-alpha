@@ -1,4 +1,4 @@
-// Migration 0018 (ADR 0028): per-tournament `scoring` / `bye_scoring` and
+// Migration 0018 (ADR 0031): per-tournament `scoring` / `bye_scoring` and
 // `tournament_participant.withdrawn`. New rows get the new defaults, but every
 // tournament that already exists was played under the old rules, so the
 // migration backfills it with 'match' scoring and a bye worth a win: its
@@ -69,7 +69,7 @@ function seedLegacyTournament(sqlite: Database.Database) {
   match.run('m2', 'r1', 't-legacy', 2, 'p-carla', null, 'p-carla', 2, 0, 0, now)
 }
 
-describe('migration 0018: scoring, bye scoring and withdrawn participants (ADR 0028)', () => {
+describe('migration 0018: scoring, bye scoring and withdrawn participants (ADR 0031)', () => {
   it('is the generated ALTER TABLEs plus a backfill of the existing tournaments', () => {
     const entry = journal.find(item => item.idx === SCORING_MIGRATION)!
     expect(entry.tag).toBe('0018_tournament_scoring_withdrawn')

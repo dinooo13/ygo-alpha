@@ -16,7 +16,7 @@ const apiError = useApiError()
 // rendered expanded, everything else lives in a collapsed section.
 const orderedRounds = computed(() => [...props.tournament.rounds].reverse())
 
-// A round robin is a league: its rounds are "Spieltage" (ADR 0028).
+// A round robin is a league: its rounds are "Spieltage" (ADR 0031).
 const isRoundRobin = computed(() => props.tournament.pairingSystem === 'round_robin')
 
 function roundLabel(round: TournamentRoundDto): string {

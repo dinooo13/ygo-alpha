@@ -403,7 +403,7 @@ every match has a result. A match always has a winner: draws (and equal game
 counts) are rejected with `draws_not_allowed`. Finishing the tournament makes
 it read-only and moves it into the "Abgeschlossen" history list. See
 [`docs/adr/0008-tournament-model.md`](adr/0008-tournament-model.md) and, for
-everything below, [`docs/adr/0028-tournament-league-scoring.md`](adr/0028-tournament-league-scoring.md).
+everything below, [`docs/adr/0031-tournament-league-scoring.md`](adr/0031-tournament-league-scoring.md).
 
 Standings are computed from the match history on every read, never stored,
 under two per-tournament settings chosen at creation (and editable during
@@ -412,7 +412,7 @@ registration only):
 - **Wertung** (`scoring`): `games` (default) gives 3 points for a win without
   dropping a game, 2 for a win that dropped one, 1 for a loss that won a game,
   0 otherwise, so a 2:0 ranks above a 2:1. `match` is the classic 3/0 and is
-  what tournaments from before ADR 0028 were backfilled with.
+  what tournaments from before ADR 0031 were backfilled with.
 - **Spielfrei** (`byeScoring`): `none` (default) gives a bye no points, no
   match played and no games ("spielfrei"); `win` scores it as a 2:0 win
   (backfilled for existing tournaments).

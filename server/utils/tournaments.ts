@@ -414,7 +414,7 @@ export function validateDeckRegistrationInput(body: unknown): { deckId: string |
 
 /**
  * Normalizes both entry styles into games (see D8). A match always has a
- * winner (ADR 0028): `{ draw: true }` and equal game counts are rejected.
+ * winner (ADR 0031): `{ draw: true }` and equal game counts are rejected.
  */
 export function validateMatchResultInput(body: unknown): { gamesA: number, gamesB: number } {
   if (!isRecord(body)) {
@@ -628,7 +628,7 @@ function computeTournamentStandings(
 }
 
 /**
- * A match with a withdrawn player is void (ADR 0028): it is not scored and
+ * A match with a withdrawn player is void (ADR 0031): it is not scored and
  * needs no result. A bye has no second player, so it is void only when its
  * one player is withdrawn.
  */
@@ -637,7 +637,7 @@ function isVoidedMatch(match: MatchRow, withdrawnIds: Set<string>): boolean {
     || (match.participantBId !== null && withdrawnIds.has(match.participantBId))
 }
 
-/** The stored shape of a bye: reported at once, a 2–0 win or an empty 0–0 (ADR 0028). */
+/** The stored shape of a bye: reported at once, a 2–0 win or an empty 0–0 (ADR 0031). */
 function byeMatchValues(byeScoring: ByeScoring, participantAId: string, now: Date) {
   const scoredAsWin = byeScoring === 'win'
   return {
@@ -778,7 +778,7 @@ function buildTournamentDetail(
     && rounds.length > 0
     && lastRound!.status === 'completed'
 
-  // A round-robin schedule is fixed by the circle method (ADR 0028): moving a
+  // A round-robin schedule is fixed by the circle method (ADR 0031): moving a
   // player to another table would break "everyone plays everyone once".
   const canEditPairings = role === 'organizer'
     && row.pairingSystem === 'swiss'
@@ -1475,7 +1475,7 @@ export function reportMatchResult(
   const normalizedBody = normalizeMatchResultBody(body, match.participantAId, match.participantBId)
   const { gamesA, gamesB } = validateMatchResultInput(normalizedBody)
 
-  // validateMatchResultInput guarantees gamesA !== gamesB: no draws (ADR 0028).
+  // validateMatchResultInput guarantees gamesA !== gamesB: no draws (ADR 0031).
   const winnerParticipantId = gamesA > gamesB ? match.participantAId : match.participantBId
 
   const now = new Date()

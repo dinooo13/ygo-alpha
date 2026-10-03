@@ -10,11 +10,11 @@ const { t, n } = useI18n()
 
 const standings = computed(() => props.tournament.standings)
 
-// Round robin reads as a league table (ADR 0028); the OMW%/GW%/OGW%
+// Round robin reads as a league table (ADR 0031); the OMW%/GW%/OGW%
 // tiebreakers belong to Swiss only.
 const isLeague = computed(() => props.tournament.pairingSystem === 'round_robin')
 // "U" exists only for tournaments scored the classic way, which can hold
-// draws from before ADR 0028.
+// draws from before ADR 0031.
 const showDraws = computed(() => props.tournament.scoring === 'match')
 const hasWithdrawn = computed(() => standings.value.some(row => row.withdrawn))
 
@@ -54,7 +54,7 @@ function differenceLabel(row: TournamentStandingRow): string {
   return difference > 0 ? `+${difference}` : String(difference)
 }
 
-/** Withdrawn rows are listed last without a place (ADR 0028). */
+/** Withdrawn rows are listed last without a place (ADR 0031). */
 function rankLabel(row: TournamentStandingRow): string {
   return row.withdrawn ? t('tournaments.standings.withdrawnRank') : String(row.rank)
 }
