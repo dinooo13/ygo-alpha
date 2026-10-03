@@ -330,6 +330,17 @@ its legality in the selected rule format, round-by-round pairings with match res
 live standings with OMW%/GW%/OGW% tiebreakers, and a history of finished tournaments. See
 [`docs/adr/0008-tournament-model.md`](adr/0008-tournament-model.md).
 
+Tester-Feedback Sept 2026 (done, see
+[`docs/adr/0028-tournament-league-scoring.md`](adr/0028-tournament-league-scoring.md)):
+
+- [x] no draws; quick results 2:0, 2:1, 1:2, 0:2
+- [x] scoring by games per tournament (2:0 ranks above 2:1), classic 3/0 kept for existing tournaments
+- [x] byes give no points by default ("spielfrei"), configurable per tournament
+- [x] round robin as a league table (Pl., Sp., S, N, Spiele, Diff., Pkt.) with "Spieltag n" and a crosstable
+- [x] "Aus der Wertung nehmen": withdraw a player from everybody's standings, reversible while running
+- [x] no pairing swaps in a round robin
+- [x] scoring and bye scoring chosen at creation, editable during registration, shown on the detail page
+
 ### Phase 8: Chat-Assistent mit Werkzeugen
 
 Goal: Replace the deck assistant's single-purpose entry points and the

@@ -15,7 +15,7 @@ mark the old as superseded.
 | [0005](0005-rule-format-model.md) | Rule format model | Accepted |
 | [0006](0006-ai-deck-assistant.md) | AI deck assistant | Superseded by [0011](0011-deck-assistance-in-chat.md) |
 | [0007](0007-sharing-and-profile-model.md) | Sharing and profile model | Accepted |
-| [0008](0008-tournament-model.md) | Tournament model | Accepted |
+| [0008](0008-tournament-model.md) | Tournament model | Accepted (scoring, byes, draws and pairing swaps partially superseded by [0028](0028-tournament-league-scoring.md)) |
 | [0009](0009-openai-compatible-assistant-provider.md) | OpenAI-compatible assistant provider | Accepted (structured-output parts superseded by [0011](0011-deck-assistance-in-chat.md), the no-SDK transport by [0020](0020-assistant-on-the-ai-sdk.md)) |
 | [0010](0010-chat-assistant-with-tools.md) | Chat assistant with tools | Accepted (partly superseded by [0011](0011-deck-assistance-in-chat.md); engine parts by [0020](0020-assistant-on-the-ai-sdk.md)) |
 | [0011](0011-deck-assistance-in-chat.md) | Deck assistance in the chat assistant | Accepted (deck link superseded by [0021](0021-no-deck-link-in-assistant-conversations.md)) |
@@ -38,3 +38,4 @@ mark the old as superseded.
 | [0028](0028-plesk-deployment.md) | Deployment to the Plesk host | Accepted |
 | [0029](0029-security-headers.md) | Security headers and a hash-based Content Security Policy | Accepted |
 | [0030](0030-edison-format.md) | Edison as a built-in format with a static banlist | Accepted |
+| [0028](0028-tournament-league-scoring.md) | Tournament scoring, byes, no draws, league tables and withdrawing | Accepted |

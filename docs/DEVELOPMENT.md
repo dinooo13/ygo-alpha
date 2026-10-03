@@ -397,13 +397,38 @@ change what a tournament recorded, unlike deck legality elsewhere in the app
 (see [Formate](#formate)), which is always recomputed live.
 
 Starting a tournament freezes the seed order and creates the first round's
-pairings; each round is played, results are entered as game counts (or via the
-`2:0` / `0:2` / `Unentschieden` shortcuts), and the round is completed once
-every match has a result. Standings (`Punkte`, `S-N-U`, `OMW%`, `GW%`, `OGW%`)
-are computed from the match history on every read, never stored. Finishing the
-tournament makes it read-only and moves it into the "Abgeschlossen" history
-list. See
-[`docs/adr/0008-tournament-model.md`](adr/0008-tournament-model.md).
+pairings; each round is played, results are entered with the `2:0` / `2:1` /
+`1:2` / `0:2` shortcuts or as game counts, and the round is completed once
+every match has a result. A match always has a winner: draws (and equal game
+counts) are rejected with `draws_not_allowed`. Finishing the tournament makes
+it read-only and moves it into the "Abgeschlossen" history list. See
+[`docs/adr/0008-tournament-model.md`](adr/0008-tournament-model.md) and, for
+everything below, [`docs/adr/0028-tournament-league-scoring.md`](adr/0028-tournament-league-scoring.md).
+
+Standings are computed from the match history on every read, never stored,
+under two per-tournament settings chosen at creation (and editable during
+registration only):
+
+- **Wertung** (`scoring`): `games` (default) gives 3 points for a win without
+  dropping a game, 2 for a win that dropped one, 1 for a loss that won a game,
+  0 otherwise, so a 2:0 ranks above a 2:1. `match` is the classic 3/0 and is
+  what tournaments from before ADR 0028 were backfilled with.
+- **Spielfrei** (`byeScoring`): `none` (default) gives a bye no points, no
+  match played and no games ("spielfrei"); `win` scores it as a 2:0 win
+  (backfilled for existing tournaments).
+
+Swiss shows `Punkte`, `S-N`, `OMW%`, `GW%`, `OGW%`. A round robin is a league
+table (`Pl.`, `Name`, `Sp.`, `S`, `N`, `Spiele`, `Diff.`, `Pkt.`) with rounds
+called "Spieltag n", ordered by points, game difference, head-to-head (only
+between exactly two), games won, seed; a "Kreuztabelle" view shows every
+result. Round-robin pairings follow the fixed circle schedule and cannot be
+swapped.
+
+"Aussteigen lassen" (drop) keeps a player's past results. "Aus der Wertung
+nehmen" (withdraw, while the tournament runs, reversible) removes *every*
+match with that player from everybody's standings, voids their pending
+matches (no result needed; the opponent is "spielfrei" without points) and
+lists them last.
 
 ## Design system ("Duel Arena")
 
