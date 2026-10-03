@@ -11,7 +11,7 @@
 // one the ids are written as they are and the script says so.
 //
 // Sources: https://formatlibrary.com/formats/edison and
-// https://edisonformat.net/rules/banlist. See docs/adr/0029-edison-format.md.
+// https://edisonformat.net/rules/banlist. See docs/adr/0030-edison-format.md.
 
 import { existsSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

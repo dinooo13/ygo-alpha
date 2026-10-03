@@ -21,7 +21,7 @@ function createTestDb() {
   return db
 }
 
-describe('the Edison banlist (ADR 0029)', () => {
+describe('the Edison banlist (ADR 0030)', () => {
   it('is the TCG list of March 2010: 43 forbidden, 70 limited, 19 semi-limited', () => {
     expect(edisonBanlist.forbidden).toHaveLength(43)
     expect(edisonBanlist.limited).toHaveLength(70)

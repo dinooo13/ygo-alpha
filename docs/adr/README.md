@@ -37,4 +37,4 @@ mark the old as superseded.
 | [0027](0027-invite-code-and-admin-token.md) | Invite-only sign-up and an admin token for the catalog syncs | Accepted |
 | [0028](0028-plesk-deployment.md) | Deployment to the Plesk host | Accepted |
 | [0029](0029-security-headers.md) | Security headers and a hash-based Content Security Policy | Accepted |
-| [0029](0029-edison-format.md) | Edison as a built-in format with a static banlist | Accepted |
+| [0030](0030-edison-format.md) | Edison as a built-in format with a static banlist | Accepted |

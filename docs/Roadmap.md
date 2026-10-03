@@ -247,7 +247,7 @@ Tester-Feedback Sept 2026:
 
 - [x] Edison (SJC Edison, April 2010) is a built-in format: the TCG Forbidden & Limited List of
   March 2010 from the Format Library as a static list, plus a card pool up to Duelist Pack: Kaiba;
-  see [`docs/adr/0029-edison-format.md`](adr/0029-edison-format.md).
+  see [`docs/adr/0030-edison-format.md`](adr/0030-edison-format.md).
 
 ### Phase 5: AI Deck Assistance
 

@@ -66,7 +66,7 @@ export type Rule =
   /**
    * Reads the card's banlist status (Forbidden / Limited / Semi-Limited): the
    * official lists from `catalog_card.banlist_info`, Edison and Classic Plus
-   * from their own lists (`loadCardDataForValidation`, ADR 0029, ADR 0022).
+   * from their own lists (`loadCardDataForValidation`, ADR 0030, ADR 0022).
    */
   | { kind: 'banlist', source: BanlistSource }
   | { kind: 'filter', match: FilterMatch, filter: CardFilter, maxCopies: FilterMaxCopies, label?: string }
@@ -100,7 +100,7 @@ export interface BanlistInfo {
   ban_tcg?: string
   ban_ocg?: string
   ban_goat?: string
-  /** Not from YGOPRODeck: added from the Format Library's March 2010 list (ADR 0029). */
+  /** Not from YGOPRODeck: added from the Format Library's March 2010 list (ADR 0030). */
   ban_edison?: string
   /** Not from YGOPRODeck: added from the generated Classic Plus list (ADR 0022). */
   ban_classic_plus?: string
