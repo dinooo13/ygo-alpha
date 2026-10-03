@@ -226,7 +226,7 @@ function onSaved(result: { created: number, merged: number }) {
       />
     </div>
     <p
-      v-else-if="!isSuggesting && justSaved.length === 0"
+      v-else-if="!isSuggesting"
       class="text-sm text-muted"
     >
       {{ t('quickEntry.review.nothingYet') }}

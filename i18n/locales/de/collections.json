@@ -46,7 +46,8 @@
       "summary": {
         "toMove": "{count} zu verschieben",
         "alreadyThere": "{count} schon in der Sammlung",
-        "missing": "{count} fehlen"
+        "missing": "{count} fehlen",
+        "moved": "{count} verschoben"
       },
       "nothingToMove": "Aus den gewählten Quellen gibt es nichts zu verschieben.",
       "list": {

@@ -204,8 +204,12 @@ const missing = computed(() => (shown.value?.cards ?? []).filter(card => card.mi
 // What no collection of the user has: the wishlist asks for exactly this.
 const notOwned = computed(() => missing.value.filter(card => card.notOwned > 0))
 
+// "aus Box A", or "2 aus Box A, 1 aus Box B" when the copies come from several collections.
 function fromLabel(card: FillCard): string {
-  return card.moves.map(move => `${n(move.quantity, 'integer')} ${t('collections.fill.from', { collection: collectionName(move.fromCollectionId) })}`).join(', ')
+  const from = (move: FillCard['moves'][number]) => t('collections.fill.from', { collection: collectionName(move.fromCollectionId) })
+  return card.moves.length === 1
+    ? from(card.moves[0]!)
+    : card.moves.map(move => `${n(move.quantity, 'integer')} ${from(move)}`).join(', ')
 }
 
 async function addToWishlist() {
@@ -311,7 +315,7 @@ async function addToWishlist() {
             <UBadge
               color="primary"
               variant="subtle"
-              :label="t('collections.fill.summary.toMove', { count: n(shown.totals.toMove, 'integer') })"
+              :label="t(result ? 'collections.fill.summary.moved' : 'collections.fill.summary.toMove', { count: n(shown.totals.toMove, 'integer') })"
             />
             <UBadge
               color="neutral"
