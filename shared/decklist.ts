@@ -357,3 +357,9 @@ export function deckRecipeRows(sections: Record<DeckSection, ExportCardRow[]>): 
     quantity: row.quantity,
   })))
 }
+
+/** The name of a downloaded YDK file: the deck's name as a file name, `deck.ydk` for a name without letters or digits. */
+export function ydkFileName(deckName: string): string {
+  const stem = deckName.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/g, '')
+  return `${stem || 'deck'}.ydk`
+}

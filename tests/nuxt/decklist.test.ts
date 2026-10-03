@@ -12,6 +12,7 @@ import {
   omegaPayload,
   parseSectionHeader,
   readOmegaPayload,
+  ydkFileName,
 } from '../../shared/decklist'
 import type { DecklistEntry, DecklistSections } from '../../shared/decklist'
 import { parseDecklist } from '../../server/utils/decklist-parse'
@@ -368,5 +369,12 @@ describe('encoders', () => {
       skipped: 3,
     })
     expect(deckRecipeRows(sections)).toHaveLength(3)
+  })
+
+  it('names the YDK file after the deck', () => {
+    expect(ydkFileName('Meine Drachen')).toBe('meine-drachen.ydk')
+    expect(ydkFileName('  Blue-Eyes: Ära #1!  ')).toBe('blue-eyes-ära-1.ydk')
+    expect(ydkFileName('!!!')).toBe('deck.ydk')
+    expect(ydkFileName('x'.repeat(200)).length).toBeLessThanOrEqual(64)
   })
 })

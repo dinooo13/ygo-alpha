@@ -926,6 +926,10 @@ const loadErrorDescription = computed(() => (error.value ? apiError(error.value,
               :disabled="!ownProfile?.handle"
               @click="() => { isShareOpen = true }"
             />
+            <DecksDeckExportMenu
+              :name="deck.name"
+              :sections="deck.sections"
+            />
             <UDropdownMenu :items="deckMenuItems">
               <UButton
                 icon="i-lucide-ellipsis"

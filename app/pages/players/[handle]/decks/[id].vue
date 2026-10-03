@@ -70,11 +70,13 @@ useHead({
           class="mt-2"
         />
 
-        <template
-          v-if="data.isOwner"
-          #actions
-        >
+        <template #actions>
+          <DecksDeckExportMenu
+            :name="data.deck.name"
+            :sections="data.sections"
+          />
           <UButton
+            v-if="data.isOwner"
             icon="i-lucide-pencil"
             :label="t('decks.menu.edit')"
             :to="`/decks/${route.params.id}`"

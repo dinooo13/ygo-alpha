@@ -220,6 +220,26 @@
       },
       "toast": {
         "created": "Deck imported"
+      },
+      "searchCatalogFor": "Search the catalog for {line}"
+    },
+    "export": {
+      "menu": "Export",
+      "empty": "The deck has no cards yet.",
+      "ydk": "Download YDK file",
+      "ydke": "Copy ydke:// link",
+      "omega": "Copy Omega deck code",
+      "recipe": "Copy card list (text)",
+      "toast": {
+        "downloaded": "{name} downloaded",
+        "ydke": "ydke:// link copied",
+        "omega": "Omega deck code copied",
+        "recipe": "Card list copied",
+        "skipped": "{count} card without a passcode was left out | {count} cards without a passcode were left out"
+      },
+      "errors": {
+        "copyFailed": "Couldn't copy to the clipboard.",
+        "omegaFailed": "The Omega deck code couldn't be created in this browser."
       }
     }
   }

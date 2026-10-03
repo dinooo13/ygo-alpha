@@ -220,6 +220,26 @@
       },
       "toast": {
         "created": "Deck importiert"
+      },
+      "searchCatalogFor": "Katalog nach Karte für {line} durchsuchen"
+    },
+    "export": {
+      "menu": "Exportieren",
+      "empty": "Das Deck hat noch keine Karten.",
+      "ydk": "YDK-Datei herunterladen",
+      "ydke": "ydke://-Link kopieren",
+      "omega": "Omega-Deckcode kopieren",
+      "recipe": "Kartenliste kopieren (Text)",
+      "toast": {
+        "downloaded": "{name} heruntergeladen",
+        "ydke": "ydke://-Link kopiert",
+        "omega": "Omega-Deckcode kopiert",
+        "recipe": "Kartenliste kopiert",
+        "skipped": "{count} Karte ohne Passcode wurde ausgelassen | {count} Karten ohne Passcode wurden ausgelassen"
+      },
+      "errors": {
+        "copyFailed": "Das Kopieren in die Zwischenablage hat nicht geklappt.",
+        "omegaFailed": "Der Omega-Deckcode konnte in diesem Browser nicht erzeugt werden."
       }
     }
   }
