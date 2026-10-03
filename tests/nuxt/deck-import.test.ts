@@ -7,11 +7,12 @@ import * as schema from '../../server/db/schema'
 import { parseImportRequest, previewDeckImport } from '../../server/utils/deck-import'
 import { seedBuiltinFormats } from '../../server/utils/rule-formats'
 import { createDeck, getDeckDetail, validateDeckCreateCardsInput, validateDeckCreateInput } from '../../server/utils/decks'
-import { encodeYdke } from '../../shared/decklist'
+import { encodeOmegaCode, encodeYdke } from '../../shared/decklist'
 import {
   buildImportCards,
   createImportRows,
   importCounts,
+  importCoverCardId,
   importSizeWarnings,
   rowSection,
   rowsInSection,
@@ -113,6 +114,42 @@ describe('previewDeckImport', () => {
     const deck = createDeck(db, 'user-a', validateDeckCreateInput(body), validateDeckCreateCardsInput(body))
     expect(getDeckDetail(db, 'user-a', deck.id).counts).toMatchObject({ main: 3, extra: 1, side: 1 })
   })
+
+  it('makes an Omega code\'s cover card the new deck\'s chosen cover', async () => {
+    const code = await encodeOmegaCode({
+      main: [CATALOG_FIXTURE_IDS.darkMagician, CATALOG_FIXTURE_IDS.darkMagician, CATALOG_FIXTURE_IDS.kuriboh],
+      extra: [CATALOG_FIXTURE_IDS.stardustDragon],
+      side: [CATALOG_FIXTURE_IDS.raigeki],
+    }, CATALOG_FIXTURE_IDS.stardustDragon)
+    const preview = previewDeckImport(db, code)
+
+    expect(preview.format).toBe('omega')
+    expect(preview.cover).toBe(CATALOG_FIXTURE_IDS.stardustDragon)
+
+    const rows = createImportRows(preview as DeckImportPreview)
+    const body = { name: 'Mit Cover', cards: buildImportCards(rows), cover_card_id: importCoverCardId(rows, preview.cover) }
+    const deck = createDeck(db, 'user-a', validateDeckCreateInput(body), validateDeckCreateCardsInput(body))
+    const detail = getDeckDetail(db, 'user-a', deck.id)
+
+    expect(detail.cover?.catalogCardId).toBe(CATALOG_FIXTURE_IDS.stardustDragon)
+    expect(detail.coverIsChosen).toBe(true)
+  })
+
+  it('rejects a cover that is no Main or Extra Deck card, without creating the deck', () => {
+    const before = db.select().from(schema.deck).all().length
+    const body = {
+      name: 'Falsches Cover',
+      cards: [
+        { catalog_card_id: CATALOG_FIXTURE_IDS.darkMagician, section: 'main', quantity: 1 },
+        { catalog_card_id: CATALOG_FIXTURE_IDS.raigeki, section: 'side', quantity: 1 },
+      ],
+      cover_card_id: CATALOG_FIXTURE_IDS.raigeki,
+    }
+
+    expect(statusOf(() => createDeck(db, 'user-a', validateDeckCreateInput(body), validateDeckCreateCardsInput(body)))).toBe(400)
+    expect(db.select().from(schema.deck).all()).toHaveLength(before)
+    expect(statusOf(() => validateDeckCreateInput({ name: 'x', cover_card_id: -1 }))).toBe(400)
+  })
 })
 
 describe('deck import rows', () => {
@@ -137,6 +174,7 @@ describe('deck import rows', () => {
           { input: { raw: '2 E', quantity: 2, query: 'E' }, candidates: [candidate(4, 'Link Monster')] },
         ],
       },
+      cover: null,
     }
   }
 
@@ -167,5 +205,29 @@ describe('deck import rows', () => {
       { catalog_card_id: 3, section: 'main', quantity: 1 },
       { catalog_card_id: 4, section: 'side', quantity: 2 },
     ])
+  })
+
+  it('takes the cover from the resolved row read from its passcode, never a Side Deck row', () => {
+    const rows = createImportRows({
+      format: 'omega',
+      sections: {
+        main: [
+          { input: { raw: '1', quantity: 2, query: '00000001' }, candidates: [candidate(1, 'Effect Monster')] },
+          { input: { raw: '2', quantity: 1, query: '00000002' }, candidates: [candidate(2, 'Synchro Monster')] },
+          { input: { raw: '5', quantity: 1, query: '00000005' }, candidates: [] },
+        ],
+        extra: [],
+        side: [{ input: { raw: '4', quantity: 1, query: '00000004' }, candidates: [candidate(4, 'Spell Card')] }],
+      },
+      cover: 2,
+    })
+
+    expect(importCoverCardId(rows, 2)).toBe(2)
+    expect(importCoverCardId(rows, 1)).toBe(1)
+    expect(importCoverCardId(rows, null)).toBeNull()
+    // In the Side Deck, unresolved, or not in the deck: the rule picks.
+    expect(importCoverCardId(rows, 4)).toBeNull()
+    expect(importCoverCardId(rows, 5)).toBeNull()
+    expect(importCoverCardId(rows, 9)).toBeNull()
   })
 })

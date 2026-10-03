@@ -111,6 +111,7 @@ export function buildSharedDeckView(
       name: deckRow.name,
       description: deckRow.description,
       updatedAt: deckRow.updatedAt.toISOString(),
+      coverCardId: loadDeckCovers(db, [deckRow.id]).get(deckRow.id)?.catalogCardId ?? null,
     },
     sections,
     counts,

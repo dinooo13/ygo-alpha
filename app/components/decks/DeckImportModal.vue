@@ -15,6 +15,7 @@ import {
   IMPORT_FILE_MAX_BYTES,
   IMPORT_TEXT_MAX_LENGTH,
   importCounts,
+  importCoverCardId,
   importSizeWarnings,
   MAX_IMPORT_CARDS,
   rowsInSection,
@@ -54,6 +55,7 @@ const step = ref<'input' | 'review'>('input')
 const text = ref('')
 const rows = ref<DeckImportRow[]>([])
 const detectedFormat = ref<DeckImportPreview['format']>('text')
+const coverPasscode = ref<number | null>(null)
 const deckName = ref('')
 const formatId = ref(NO_FORMAT)
 const errorMessage = ref('')
@@ -80,6 +82,7 @@ watch(() => props.open, (open) => {
     step.value = 'input'
     text.value = ''
     rows.value = []
+    coverPasscode.value = null
     deckName.value = ''
     formatId.value = NO_FORMAT
     errorMessage.value = ''
@@ -134,6 +137,7 @@ async function analyze() {
   try {
     const preview = await $fetch<DeckImportPreview>('/api/decks/import/preview', { method: 'POST', body: { text: text.value } })
     rows.value = createImportRows(preview)
+    coverPasscode.value = preview.cover
     detectedFormat.value = preview.format
     if (deckName.value.trim() === '') {
       deckName.value = (fileStem || t('decks.import.defaultName')).slice(0, DECK_NAME_MAX_LENGTH)
@@ -178,6 +182,7 @@ async function create() {
         name: deckName.value.trim(),
         format_id: formatId.value === NO_FORMAT ? null : formatId.value,
         cards: cards.value,
+        cover_card_id: importCoverCardId(rows.value, coverPasscode.value),
       },
     })
     emit('created', deck)

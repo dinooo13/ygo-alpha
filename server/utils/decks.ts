@@ -218,12 +218,36 @@ function parseFormatIdField(body: Record<string, unknown>): string | null | unde
 export interface DeckCreateInput extends DeckInput {
   /** The rule format to assign right away; `null` for none. */
   formatId: string | null
+  /**
+   * The cover card to choose right away (an imported Omega code's, ADR 0012);
+   * `null` leaves it to the rule. Must be a Main or Extra Deck card of `cards`.
+   */
+  coverCardId: number | null
 }
 
-/** A `POST /api/decks` body: name, description and the optional `format_id` (#148). */
+/** A `POST /api/decks` body: name, description, the optional `format_id` (#148) and `cover_card_id`. */
 export function validateDeckCreateInput(body: unknown): DeckCreateInput {
   const input = validateDeckInput(body)
-  return { ...input, formatId: parseFormatIdField(body as Record<string, unknown>) ?? null }
+  const record = body as Record<string, unknown>
+  return { ...input, formatId: parseFormatIdField(record) ?? null, coverCardId: parseCoverCardIdField(record) ?? null }
+}
+
+/** `cover_card_id` (or `coverCardId`): `undefined` when absent, `null` to clear, else a card id. */
+function parseCoverCardIdField(body: Record<string, unknown>): number | null | undefined {
+  const rawCoverCardId = body.cover_card_id !== undefined ? body.cover_card_id : body.coverCardId
+  if (rawCoverCardId === undefined) {
+    return undefined
+  }
+  if (rawCoverCardId === null || rawCoverCardId === '') {
+    return null
+  }
+  const coverCardId = typeof rawCoverCardId === 'number'
+    ? rawCoverCardId
+    : typeof rawCoverCardId === 'string' ? Number(rawCoverCardId) : Number.NaN
+  if (!Number.isSafeInteger(coverCardId) || coverCardId < 1) {
+    badRequest('cover_card_id must be a positive integer or null')
+  }
+  return coverCardId
 }
 
 export interface DeckUpdateInput extends Partial<DeckInput> {
@@ -254,20 +278,9 @@ export function validateDeckUpdateInput(body: unknown): DeckUpdateInput {
     input.formatId = formatId
   }
 
-  const rawCoverCardId = body.cover_card_id !== undefined ? body.cover_card_id : body.coverCardId
-  if (rawCoverCardId !== undefined) {
-    if (rawCoverCardId === null || rawCoverCardId === '') {
-      input.coverCardId = null
-    }
-    else {
-      const coverCardId = typeof rawCoverCardId === 'number'
-        ? rawCoverCardId
-        : typeof rawCoverCardId === 'string' ? Number(rawCoverCardId) : Number.NaN
-      if (!Number.isSafeInteger(coverCardId) || coverCardId < 1) {
-        badRequest('cover_card_id must be a positive integer or null')
-      }
-      input.coverCardId = coverCardId
-    }
+  const coverCardId = parseCoverCardIdField(body)
+  if (coverCardId !== undefined) {
+    input.coverCardId = coverCardId
   }
 
   return input
@@ -708,12 +721,13 @@ export function validateDeckWithRules(db: Db, userId: string, deckId: string, ru
  * row are written in one transaction, so a bad card never leaves behind an
  * empty deck. An optional `formatId` is assigned at once; it is checked like
  * PATCH does (a built-in format or one of the caller's own, else 400
- * `format_id does not exist`) before anything is written.
+ * `format_id does not exist`) before anything is written. So is an optional
+ * `coverCardId`, which must be a Main or Extra Deck card of `cards`.
  */
 export function createDeck(
   db: Db,
   userId: string,
-  input: DeckInput & { formatId?: string | null },
+  input: DeckInput & { formatId?: string | null, coverCardId?: number | null },
   cards?: DeckCardInput[],
 ): DeckDetail {
   const now = new Date()
@@ -765,6 +779,17 @@ export function createDeck(
         createdAt: now,
         updatedAt: now,
       }))).run()
+    }
+
+    if (typeof input.coverCardId === 'number') {
+      assertCoverCandidate(txDb, createdDeck!.id, input.coverCardId)
+      const [withCover] = txDb
+        .update(deck)
+        .set({ coverCardId: input.coverCardId })
+        .where(eq(deck.id, createdDeck!.id))
+        .returning()
+        .all()
+      return withCover!
     }
 
     return createdDeck!

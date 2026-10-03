@@ -30,6 +30,8 @@ export interface ParsedDecklist {
    * splits by card type once it knows the cards (`isExtraDeckCard`).
    */
   sections: DecklistSections
+  /** The passcode of the cover card an Omega code carries; `null` for every other format. */
+  cover: number | null
 }
 
 /** Passcodes per section, as the passcode formats carry them (one per copy). */
@@ -224,13 +226,14 @@ export function encodeYdke(sections: PasscodeSections): string {
 /**
  * The bytes inside an Omega deck code: the count of Main + Extra cards and the
  * count of Side cards (one byte each), then every passcode as uint32 LE: Main
- * and Extra mixed, then Side.
+ * and Extra mixed, then Side, then (in current exports) the cover card's
+ * passcode, outside both counts.
  */
-export function omegaPayload(mainAndExtra: number[], side: number[]): Uint8Array {
+export function omegaPayload(mainAndExtra: number[], side: number[], cover: number | null = null): Uint8Array {
   if (mainAndExtra.length > 255 || side.length > 255) {
     throw new RangeError('An Omega deck code holds at most 255 cards per part')
   }
-  const ids = uint32sToBytes([...mainAndExtra, ...side])
+  const ids = uint32sToBytes(cover === null ? [...mainAndExtra, ...side] : [...mainAndExtra, ...side, cover])
   const bytes = new Uint8Array(2 + ids.length)
   bytes[0] = mainAndExtra.length
   bytes[1] = side.length
@@ -240,11 +243,10 @@ export function omegaPayload(mainAndExtra: number[], side: number[]): Uint8Array
 
 /**
  * The inverse of `omegaPayload`; `null` when the counted passcodes don't fit.
- * Current Omega exports append a passcode after the Side Deck (the deck's
- * cover card, outside both counts); bytes after the counted passcodes are
- * ignored.
+ * The cover card is `null` in codes without one (older exports); anything
+ * after it is ignored.
  */
-export function readOmegaPayload(bytes: Uint8Array): { mainAndExtra: number[], side: number[] } | null {
+export function readOmegaPayload(bytes: Uint8Array): { mainAndExtra: number[], side: number[], cover: number | null } | null {
   if (bytes.length < 2) {
     return null
   }
@@ -253,8 +255,10 @@ export function readOmegaPayload(bytes: Uint8Array): { mainAndExtra: number[], s
   if (bytes.length < 2 + 4 * (mainCount + sideCount)) {
     return null
   }
-  const ids = bytesToUint32s(bytes, 2, mainCount + sideCount)!
-  return { mainAndExtra: ids.slice(0, mainCount), side: ids.slice(mainCount) }
+  const counted = mainCount + sideCount
+  const ids = bytesToUint32s(bytes, 2, counted)!
+  const cover = bytesToUint32s(bytes, 2 + 4 * counted, 1)?.[0]
+  return { mainAndExtra: ids.slice(0, mainCount), side: ids.slice(mainCount), cover: isPasscode(cover) ? cover : null }
 }
 
 async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
@@ -267,8 +271,8 @@ async function deflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
  * and base64'd. Async because it uses the platform's `CompressionStream`
  * (browsers since 2023, Node 18+).
  */
-export async function encodeOmegaCode(sections: PasscodeSections): Promise<string> {
-  const payload = omegaPayload([...sections.main, ...sections.extra], sections.side)
+export async function encodeOmegaCode(sections: PasscodeSections, cover: number | null = null): Promise<string> {
+  const payload = omegaPayload([...sections.main, ...sections.extra], sections.side, cover)
   return bytesToBase64(await deflateRaw(payload))
 }
 

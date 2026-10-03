@@ -39,7 +39,7 @@ function passcodeEntries(passcodes: number[]): DecklistEntry[] {
   return mergeDecklistEntries(passcodes.map(passcode => ({ passcode, quantity: 1, raw: String(passcode) })))
 }
 
-function fromPasscodes(format: ParsedDecklist['format'], sections: PasscodeSections): ParsedDecklist {
+function fromPasscodes(format: ParsedDecklist['format'], sections: PasscodeSections, cover: number | null = null): ParsedDecklist {
   return {
     format,
     sections: {
@@ -47,6 +47,7 @@ function fromPasscodes(format: ParsedDecklist['format'], sections: PasscodeSecti
       extra: passcodeEntries(sections.extra),
       side: passcodeEntries(sections.side),
     },
+    cover,
   }
 }
 
@@ -80,7 +81,7 @@ function parseOmega(text: string): ParsedDecklist | null {
   }
 
   // Main and Extra come mixed; the caller splits them by card type.
-  return fromPasscodes('omega', { main: payload.mainAndExtra, extra: [], side: payload.side })
+  return fromPasscodes('omega', { main: payload.mainAndExtra, extra: [], side: payload.side }, payload.cover)
 }
 
 function parseLines(text: string, format: 'ydk' | 'text'): ParsedDecklist {
@@ -127,6 +128,7 @@ function parseLines(text: string, format: 'ydk' | 'text'): ParsedDecklist {
       extra: mergeDecklistEntries(sections.extra),
       side: mergeDecklistEntries(sections.side),
     },
+    cover: null,
   }
 }
 

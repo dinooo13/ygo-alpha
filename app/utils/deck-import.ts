@@ -20,6 +20,8 @@ export const IMPORT_FILE_MAX_BYTES = 200_000
 export interface DeckImportPreview {
   format: DecklistFormat
   sections: Record<DeckSection, EntrySuggestResult[]>
+  /** The cover card's passcode from an Omega code, else `null`. */
+  cover: number | null
 }
 
 /** A review row plus the section its line was in; see `rowSection` for the section it ends up in. */
@@ -130,4 +132,17 @@ export function buildImportCards(rows: DeckImportRow[]): DeckImportCard[] {
     }
   }
   return [...merged.values()]
+}
+
+/**
+ * The new deck's cover (ADR 0012) for an Omega code's cover passcode: the card
+ * of the resolved row read from that passcode, while the row ends up in Main
+ * or Extra. `null` leaves the cover to the rule.
+ */
+export function importCoverCardId(rows: DeckImportRow[], coverPasscode: number | null): number | null {
+  if (coverPasscode === null) {
+    return null
+  }
+  const row = rows.find(row => row.raw === String(coverPasscode) && isEntryRowResolved(row) && rowSection(row) !== 'side')
+  return row?.selectedCardId ?? null
 }

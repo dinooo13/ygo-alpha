@@ -145,6 +145,8 @@ describe('parseDecklist: YGO Omega deck code', () => {
     // The cover card is not an extra copy: Cyber End Dragon is in the deck once.
     expect(parsed.sections.main.find(entry => entry.passcode === 1546123)?.quantity).toBe(1)
     expect(parsed.sections.side).toEqual([{ passcode: 66664203, quantity: 3, raw: '66664203' }])
+    expect(parsed.cover).toBe(1546123)
+    expect(parseDecklist(OMEGA_CODE).cover).toBeNull()
   })
 
   it('tolerates whitespace around the code and a wrapped line', () => {
@@ -310,11 +312,13 @@ describe('encoders', () => {
 
     expect(Array.from(payload.slice(0, 2))).toEqual([3, 1])
     expect(payload).toHaveLength(2 + 4 * 4)
-    expect(readOmegaPayload(payload)).toEqual({ mainAndExtra: [1, 2, 3], side: [4] })
     expect(readOmegaPayload(payload.slice(0, payload.length - 1))).toBeNull()
-    // Bytes after the counted passcodes (Omega's cover card) are ignored.
-    const withCover = new Uint8Array([...payload, ...uint32sToBytes([99])])
-    expect(readOmegaPayload(withCover)).toEqual({ mainAndExtra: [1, 2, 3], side: [4] })
+    expect(readOmegaPayload(payload)).toEqual({ mainAndExtra: [1, 2, 3], side: [4], cover: null })
+    // The cover card follows the counted passcodes; anything after it is ignored.
+    const withCover = omegaPayload([1, 2, 3], [4], 2)
+    expect(withCover).toHaveLength(2 + 4 * 5)
+    expect(readOmegaPayload(withCover)).toEqual({ mainAndExtra: [1, 2, 3], side: [4], cover: 2 })
+    expect(readOmegaPayload(new Uint8Array([...withCover, ...uint32sToBytes([99])]))).toEqual({ mainAndExtra: [1, 2, 3], side: [4], cover: 2 })
     expect(() => omegaPayload(Array.from({ length: 256 }, () => 1), [])).toThrow(RangeError)
   })
 
@@ -341,6 +345,17 @@ describe('encoders', () => {
     }))
 
     expect(again.sections).toEqual(parsed.sections)
+  })
+
+  it('re-encodes a current Omega export with its cover card', async () => {
+    const parsed = parseDecklist(OMEGA_CODE_WITH_COVER)
+    const again = parseDecklist(await encodeOmegaCode({
+      main: parsed.sections.main.flatMap(entry => Array.from({ length: entry.quantity }, () => entry.passcode!)),
+      extra: [],
+      side: parsed.sections.side.flatMap(entry => Array.from({ length: entry.quantity }, () => entry.passcode!)),
+    }, parsed.cover))
+
+    expect(again).toEqual(parsed)
   })
 
   it("writes Omega's recipe in the deck's order and reads it back", () => {

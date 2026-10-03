@@ -258,7 +258,7 @@ describe('public deck page', () => {
     state.error = null
     state.deck = {
       owner: { handle: 'fabian', displayName: 'Fabian', bio: null },
-      deck: { id: 'deck-1', name: 'Blue-Eyes Deck', description: null, updatedAt: '2025-01-01T00:00:00.000Z' },
+      deck: { id: 'deck-1', name: 'Blue-Eyes Deck', description: null, updatedAt: '2025-01-01T00:00:00.000Z', coverCardId: null },
       sections: {
         main: [{
           catalogCardId: 89631139,
@@ -343,7 +343,7 @@ describe('public deck page', () => {
   function baseDeck(overrides: Partial<SharedDeckView> = {}): SharedDeckView {
     return {
       owner: { handle: 'fabian', displayName: 'Fabian', bio: null },
-      deck: { id: 'deck-1', name: 'Blue-Eyes Deck', description: null, updatedAt: '2025-01-01T00:00:00.000Z' },
+      deck: { id: 'deck-1', name: 'Blue-Eyes Deck', description: null, updatedAt: '2025-01-01T00:00:00.000Z', coverCardId: null },
       sections: { main: [], extra: [], side: [] },
       counts: { main: 8, extra: 0, side: 0, total: 8 },
       limits: { mainMin: 40, mainMax: 60, extraMax: 15, sideMax: 15, maxCopies: 3 },

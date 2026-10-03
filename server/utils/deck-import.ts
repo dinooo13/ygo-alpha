@@ -25,6 +25,12 @@ export interface DeckImportPreview {
    * allows.
    */
   sections: Record<DeckSection, EntrySuggestResult[]>
+  /**
+   * The cover card's passcode from an Omega code, else `null`. The client
+   * makes the row with that passcode the new deck's cover while it ends up in
+   * Main or Extra (ADR 0012).
+   */
+  cover: number | null
 }
 
 const SUGGESTIONS_PER_ENTRY = 5
@@ -64,5 +70,6 @@ export function previewDeckImport(db: Db, text: string): DeckImportPreview {
   return {
     format: parsed.format,
     sections: { main: lookup('main'), extra: lookup('extra'), side: lookup('side') },
+    cover: parsed.cover,
   }
 }
