@@ -2,16 +2,20 @@ import { and, eq, inArray, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { createError } from 'h3'
 import { foldCardName } from '../../shared/card-name-fold'
+import { mergeDecklistEntries } from '../../shared/decklist'
+import type { DecklistEntry } from '../../shared/decklist'
+import { DECK_SECTIONS } from '../../shared/deck-sections'
 import type { useDb } from '../db'
 import { catalogCard, catalogCardTranslation, catalogPrinting } from '../db/schema'
 import { primaryImageUrlSql } from './card-image-sql'
 import { activeCatalogCard, escapedLike, escapeLikeTerm } from './card-name-search'
 import { resolvePasscode } from './card-passcode'
+import { entryToParsedLine, parseDecklist } from './decklist-parse'
+import { MAX_ENTRY_QUANTITY, SET_CODE_EXACT } from './entry-line'
+import type { ParsedEntryLine } from './entry-line'
 
 type Db = ReturnType<typeof useDb>
 
-/** Upper bound for a single parsed quantity ("99x Kuriboh" is already absurd). */
-export const MAX_ENTRY_QUANTITY = 99
 /** Upper bound for how many lines one suggest request may carry. */
 export const MAX_ENTRY_LINES = 50
 /** Upper bound for a single free-text field (the Liste textarea). */
@@ -23,26 +27,7 @@ const MIN_FUZZY_SCORE = 0.3
 const DEFAULT_SUGGEST_LIMIT = 5
 const MAX_SUGGEST_LIMIT = 20
 
-// Set codes look like "SDY-006", "LOB-005", "LDS2-EN018", "YS17-EN041".
-const SET_CODE_SOURCE = '[A-Z0-9]{2,5}-[A-Z]{0,3}\\d{3}'
-const SET_CODE_EXACT = new RegExp(`^${SET_CODE_SOURCE}$`, 'i')
-const SET_CODE_PARENTHESIZED = new RegExp(`\\((${SET_CODE_SOURCE})\\)`, 'i')
-// YGOPRODeck passcodes are 8 digits (the catalog card id).
-const PASSCODE_EXACT = /^\d{8}$/
-// A line that is only a quantity ("3", "3x") names no card at all.
-const QUANTITY_ONLY = /^\d{1,3}\s*[x×*]?$/i
-
 export type EntryMatchedBy = 'passcode' | 'set_code' | 'exact' | 'prefix' | 'contains' | 'fuzzy'
-
-export interface ParsedEntryLine {
-  /** The line exactly as the user/OCR/speech produced it. */
-  raw: string
-  quantity: number
-  /** The searchable remainder (card name, set code, or passcode). */
-  query: string
-  setCode?: string
-  passcode?: number
-}
 
 export interface EntryCandidate {
   cardId: number
@@ -119,83 +104,20 @@ export function similarity(a: string, b: string): number {
   return (2 * shared) / (a.length - 1 + b.length - 1)
 }
 
-function clampQuantity(value: number): number {
-  if (!Number.isFinite(value) || value < 1) {
-    return 1
-  }
-  return Math.min(MAX_ENTRY_QUANTITY, Math.floor(value))
-}
-
 /**
- * Parses one hand-typed / dictated / OCR'd line into a quantity plus a
- * searchable remainder. Recognized shapes:
- * `3x Dark Magician`, `Dark Magician x3`, `3 Dark Magician`,
- * `Dark Magician (SDY-006)`, `SDY-006`, `46986414`.
- *
- * Purely syntactic: a leading bare number is ambiguous ("7 Colored Fish" is
- * a card, "7 Kuriboh" is a count), so `resolveEntryLine` re-checks the
- * untouched line against the catalog before the line is looked up.
+ * Reads a pasted block through the deck-list parser (decklist-parse.ts): one
+ * card per line, but also YDK files, `ydke://` links, Omega deck codes and
+ * text recipes. Header, comment and section lines name no card, and entries
+ * for the same card are merged across sections (quick capture doesn't care
+ * about sections).
  */
-export function parseEntryLine(line: string): ParsedEntryLine {
-  const raw = line
-  const collapsed = line.replace(/\s+/g, ' ').trim()
-
-  if (QUANTITY_ONLY.test(collapsed)) {
-    // "3" / "3x" alone names no card — parseEntryText drops it.
-    return { raw, quantity: 1, query: '' }
-  }
-
-  // Tabs and commas act as field separators (pasted spreadsheet columns),
-  // never as part of a card name.
-  let rest = line.replace(/[\t,;]+/g, ' ').replace(/\s+/g, ' ').trim()
-  let quantity = 1
-
-  const leadingMultiplier = rest.match(/^(\d{1,3})\s*[x×*]\s*(.+)$/i)
-  const trailingMultiplier = rest.match(/^(.+?)\s*[x×*]\s*(\d{1,3})$/i)
-  const leadingCount = rest.match(/^(\d{1,3})\s+(.+)$/)
-
-  if (leadingMultiplier) {
-    quantity = clampQuantity(Number(leadingMultiplier[1]))
-    rest = leadingMultiplier[2]!.trim()
-  }
-  else if (trailingMultiplier) {
-    quantity = clampQuantity(Number(trailingMultiplier[2]))
-    rest = trailingMultiplier[1]!.trim()
-  }
-  else if (leadingCount) {
-    quantity = clampQuantity(Number(leadingCount[1]))
-    rest = leadingCount[2]!.trim()
-  }
-
-  const parsed: ParsedEntryLine = { raw, quantity, query: rest }
-
-  const parenthesized = rest.match(SET_CODE_PARENTHESIZED)
-  if (parenthesized) {
-    parsed.setCode = parenthesized[1]!.toUpperCase()
-    const withoutSetCode = rest.replace(SET_CODE_PARENTHESIZED, ' ').replace(/\s+/g, ' ').trim()
-    parsed.query = withoutSetCode === '' ? parsed.setCode : withoutSetCode
-    return parsed
-  }
-
-  if (SET_CODE_EXACT.test(rest)) {
-    parsed.setCode = rest.toUpperCase()
-    parsed.query = parsed.setCode
-    return parsed
-  }
-
-  if (PASSCODE_EXACT.test(rest)) {
-    parsed.passcode = Number(rest)
-  }
-
-  return parsed
+export function parseEntryText(text: string): ParsedEntryLine[] {
+  return mergeDecklistEntries(parseEntryTextEntries(text)).map(entryToParsedLine)
 }
 
-/** Parses a multi-line block ("eine Karte pro Zeile"), skipping blank lines. */
-export function parseEntryText(text: string): ParsedEntryLine[] {
-  return text
-    .split(/\r?\n/)
-    .map(line => parseEntryLine(line))
-    .filter(parsed => parsed.query !== '')
+function parseEntryTextEntries(text: string): DecklistEntry[] {
+  const { sections } = parseDecklist(text)
+  return DECK_SECTIONS.flatMap(section => sections[section])
 }
 
 interface CandidateRow {
@@ -543,8 +465,12 @@ export function resolveEntryLine(db: Db, parsed: ParsedEntryLine): ParsedEntryLi
   return exact || exactGerman ? { raw: parsed.raw, quantity: 1, query: rawLine } : parsed
 }
 
-function badRequest(message: string): never {
-  throw createError({ statusCode: 400, statusMessage: message })
+function badRequest(message: string, code?: string): never {
+  throw createError({
+    statusCode: 400,
+    statusMessage: message,
+    data: code ? { code, params: { max: MAX_ENTRY_LINES } } : undefined,
+  })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -554,10 +480,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export interface SuggestRequest {
   lines: ParsedEntryLine[]
   limit: number
-}
-
-function countLines(text: string): number {
-  return text.split(/\r?\n/).filter(line => line.trim() !== '').length
 }
 
 export function parseSuggestLimit(limit: unknown): number {
@@ -573,8 +495,9 @@ export function parseSuggestLimit(limit: unknown): number {
 
 /**
  * Validates and normalizes the two input modes (Liste textarea, per-item
- * list). Sizes and line counts are checked *before* anything is parsed, so
- * an oversized payload is rejected instead of being tokenized.
+ * list). Text sizes are checked *before* anything is parsed, so an oversized
+ * payload is rejected instead of being tokenized; the line cap applies to the
+ * merged lines.
  */
 export function parseSuggestRequest(body: unknown): SuggestRequest {
   if (!isRecord(body)) {
@@ -594,27 +517,32 @@ export function parseSuggestRequest(body: unknown): SuggestRequest {
     badRequest(`text must be at most ${MAX_ENTRY_TEXT_LENGTH} characters`)
   }
 
-  const lineCount = (typeof text === 'string' ? countLines(text) : 0) + (Array.isArray(items) ? items.length : 0)
-  if (lineCount > MAX_ENTRY_LINES) {
-    badRequest(`A request may contain at most ${MAX_ENTRY_LINES} lines`)
+  // Lines are counted after merging: a YDK has one line per copy, and a
+  // 40-card deck is not 40 lookups.
+  if (Array.isArray(items) && items.length > MAX_ENTRY_LINES) {
+    badRequest(`A request may contain at most ${MAX_ENTRY_LINES} lines`, 'too_many_lines')
   }
 
-  const lines: ParsedEntryLine[] = []
+  const entries: DecklistEntry[] = []
   if (typeof text === 'string') {
-    lines.push(...parseEntryText(text))
+    entries.push(...parseEntryTextEntries(text))
   }
   if (Array.isArray(items)) {
     for (const item of items) {
       if (typeof item !== 'string') {
         badRequest('items must be an array of strings')
       }
-      const parsed = parseEntryLine(item)
-      if (parsed.query !== '') {
-        lines.push(parsed)
+      if (item.length > MAX_ENTRY_TEXT_LENGTH) {
+        badRequest(`an item must be at most ${MAX_ENTRY_TEXT_LENGTH} characters`)
       }
+      entries.push(...parseEntryTextEntries(item))
     }
   }
 
+  const lines = mergeDecklistEntries(entries).map(entryToParsedLine)
+  if (lines.length > MAX_ENTRY_LINES) {
+    badRequest(`A request may contain at most ${MAX_ENTRY_LINES} lines`, 'too_many_lines')
+  }
   if (lines.length === 0) {
     badRequest('No card lines to look up')
   }
@@ -628,7 +556,7 @@ export function suggestForRequest(db: Db, request: SuggestRequest): EntrySuggest
   // common case and each lookup scans the catalog — do it once per query.
   const cache = new Map<string, EntryCandidate[]>()
 
-  return request.lines.map((line) => {
+  const results = request.lines.map((line) => {
     const input = resolveEntryLine(db, line)
     const cacheKey = `${input.query.toLowerCase()}|${input.setCode ?? ''}|${input.passcode ?? ''}`
     const cached = cache.get(cacheKey)
@@ -639,4 +567,20 @@ export function suggestForRequest(db: Db, request: SuggestRequest): EntrySuggest
 
     return { input, candidates }
   })
+
+  // "3 Name" lines were only merged when identical (a bare leading count may
+  // be part of a name); now that every line is resolved, equal cards merge.
+  const merged = new Map<string, EntrySuggestResult>()
+  for (const result of results) {
+    const { input } = result
+    const key = input.passcode !== undefined ? `p:${input.passcode}` : `n:${input.query.toLowerCase()}|${input.setCode ?? ''}`
+    const existing = merged.get(key)
+    if (existing) {
+      existing.input = { ...existing.input, quantity: Math.min(MAX_ENTRY_QUANTITY, existing.input.quantity + input.quantity) }
+    }
+    else {
+      merged.set(key, { input, candidates: result.candidates })
+    }
+  }
+  return [...merged.values()]
 }

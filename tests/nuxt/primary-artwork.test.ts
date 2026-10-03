@@ -14,7 +14,8 @@ import { addOwnedCard, listOwnedCards, searchCatalogCards } from '../../server/u
 import { loadInventoryCardDisplay } from '../../server/utils/inventory-search'
 import { addWishlistItem, listWishlist } from '../../server/utils/wishlist'
 import { buildSharedDeckView, listSharedInventory } from '../../server/utils/shared-views'
-import { parseEntryLine, suggestCatalogMatches } from '../../server/utils/card-entry'
+import { suggestCatalogMatches } from '../../server/utils/card-entry'
+import { parseEntryLine } from '../../server/utils/entry-line'
 
 function createTestDb() {
   const sqlite = new Database(':memory:')

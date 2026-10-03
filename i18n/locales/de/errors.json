@@ -13,6 +13,8 @@
       "quantity_too_large": "Die Anzahl darf höchstens {max} betragen.",
       "owned_card_not_found": "Diese Karte ist nicht mehr in deinem Inventar.",
       "items_invalid": "Einige Zeilen sind ungültig.",
+      "too_many_lines": "Bitte höchstens {max} verschiedene Karten auf einmal auswerten.",
+      "invalid_decklist": "Dieser Deckcode konnte nicht gelesen werden.",
       "collection_not_found": "Diese Sammlung gibt es nicht mehr.",
       "collection_name_taken": "Es gibt bereits eine Sammlung mit diesem Namen.",
       "wishlist_item_not_found": "Dieser Eintrag ist nicht mehr auf deiner Wunschliste.",

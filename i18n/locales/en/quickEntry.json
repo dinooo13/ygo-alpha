@@ -10,7 +10,7 @@
     },
     "list": {
       "label": "Card list",
-      "description": "One card per line. Quantity, set code or passcode are detected automatically.",
+      "description": "One card per line. Quantity, set code or passcode are detected automatically. Deck lists work too (YDK, ydke://, Omega code, recipe); headings such as “Monster” or “Extra” are skipped.",
       "examples": "Examples:",
       "tooManyLines": "{count} lines — please process at most {max} at a time.",
       "submit": "Recognize cards"
