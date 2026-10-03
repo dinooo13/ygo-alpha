@@ -49,6 +49,7 @@
     },
     "matchedBy": {
       "passcode": "Passcode",
+      "near_passcode": "Passcode in der Nähe",
       "set_code": "Set-Code",
       "exact": "Exakt",
       "prefix": "Namensanfang",

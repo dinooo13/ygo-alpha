@@ -2,7 +2,7 @@
 // review flow (Roadmap Phase 2). Kept out of the components so the
 // preselection, status, and payload rules can be unit tested on their own.
 
-export type EntryMatchedBy = 'passcode' | 'set_code' | 'exact' | 'prefix' | 'contains' | 'fuzzy'
+export type EntryMatchedBy = 'passcode' | 'near_passcode' | 'set_code' | 'exact' | 'prefix' | 'contains' | 'fuzzy'
 
 export interface EntryCandidate {
   cardId: number
