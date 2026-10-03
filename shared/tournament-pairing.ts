@@ -173,12 +173,14 @@ export function roundRobinSchedule(participantIds: string[]): Array<Array<[strin
  * for `roundNumber`. Dropped participants stay in the seed-ordered circle (so
  * the schedule never shifts mid-tournament) and are only turned into a bye —
  * or dropped entirely, when both sides of a pair are dropped — after the
- * slice is taken. Withdrawn participants are not special-cased at all: their
- * fixtures are still created (so reinstating them restores a complete
- * schedule) and the standings and the UI treat those matches as void.
+ * slice is taken. Withdrawn participants win over dropped ones: they are never
+ * turned into a bye, even when also dropped. Their fixtures are still created
+ * (so reinstating them restores a complete schedule) and the standings and the
+ * UI treat those matches as void — a bye for the opponent would score under
+ * `byeScoring: 'win'`, but nothing against a withdrawn player may count.
  */
 export function pairRoundRobinRound(participants: PairingParticipant[], roundNumber: number): Pairing[] {
-  const droppedIds = new Set(participants.filter(p => p.dropped).map(p => p.id))
+  const droppedIds = new Set(participants.filter(p => p.dropped && !p.withdrawn).map(p => p.id))
   const seedOrderedIds = [...participants].sort((a, b) => a.seed - b.seed).map(p => p.id)
   const schedule = roundRobinSchedule(seedOrderedIds)
   const slice = schedule[roundNumber - 1]

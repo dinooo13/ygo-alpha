@@ -1042,6 +1042,49 @@ describe('round robin league', () => {
   })
 })
 
+describe('round robin with a dropped and withdrawn player', () => {
+  it('keeps their fixture void instead of giving the opponent a scoring bye (byeScoring win)', () => {
+    const db = createTestDb()
+    seedUsersAndCatalog(db)
+    const id = createTournament(db, 'user-a', validateTournamentInput({
+      name: 'Liga mit Freilos-Wertung',
+      includeSelf: false,
+      pairingSystem: 'round_robin',
+      byeScoring: 'win',
+    })).id
+    for (const name of ['Alice', 'Bob', 'Carla', 'Dave']) {
+      addParticipant(db, 'user-a', id, validateParticipantInput({ name }))
+    }
+    let detail = startTournament(db, 'user-a', id)
+    detail = reportBothMatches(db, id, detail)
+    detail = completeRound(db, 'user-a', id, detail.currentRound!.id)
+
+    const bob = detail.participants.find(p => p.name === 'Bob')!
+    updateParticipant(db, 'user-a', id, bob.id, { dropped: true })
+    detail = updateParticipant(db, 'user-a', id, bob.id, { withdrawn: true })
+    const pointsBefore = new Map(detail.standings.map(row => [row.participantId, row.points]))
+
+    detail = createNextRound(db, 'user-a', id)
+    const matches = detail.currentRound!.matches
+    expect(matches.filter(match => match.isBye)).toHaveLength(0)
+    const bobFixture = matches.find(match => match.participantAId === bob.id || match.participantBId === bob.id)!
+    expect(bobFixture.voided).toBe(true)
+
+    // Round 2 is finished by playing the one real match; the opponent of the
+    // withdrawn player earns nothing from the void fixture.
+    for (const match of matches.filter(match => !match.voided)) {
+      detail = reportMatchResult(db, 'user-a', id, match.id, { gamesA: 2, gamesB: 0 })
+    }
+    detail = completeRound(db, 'user-a', id, detail.rounds[1]!.id)
+    const opponentId = bobFixture.participantAId === bob.id ? bobFixture.participantBId! : bobFixture.participantAId
+    expect(detail.standings.find(row => row.participantId === opponentId)).toMatchObject({
+      points: pointsBefore.get(opponentId),
+      byes: 0,
+    })
+    expect(detail.standings.at(-1)).toMatchObject({ participantId: bob.id, withdrawn: true, points: 0 })
+  })
+})
+
 describe('swiss with a withdrawn player', () => {
   it('pairs the next round without them and ignores their results', () => {
     const db = createTestDb()
