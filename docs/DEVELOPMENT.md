@@ -564,7 +564,8 @@ Production runs on a Plesk host through its Node.js support (Passenger); see [AD
 
 - **From GitHub:** Actions → Deploy → Run workflow (on `main`). The secrets live in the `production` environment.
 - **From a checkout:** `DEPLOY_SSH=user@host DEPLOY_PATH=/example.com DEPLOY_URL=https://example.com scripts/deploy-plesk.sh`
-- **Rollback:** on the server, move `.output.prev` back to `.output` and `touch tmp/restart.txt`. Database backups from before each deploy are in `data/backups/` (last 5).
+- **Rollback:** Actions → Deploy → Run workflow with "Roll back", or `scripts/deploy-plesk.sh --rollback` from a checkout. It swaps `.output` and `.output.prev` (a second rollback rolls forward again); migrations stay applied. Database backups from before each deploy are in `data/backups/` (last 5).
+- **The receive script:** the server side of a deploy is `deploy/plesk/receive.sh`, installed by hand as `$DEPLOY_PATH/deploy-receive.sh`, and the deploy key can run only that ([ADR 0033](adr/0033-deploy-key-forced-command.md)). A deploy stops before building when the installed copy differs from the repository's, so after changing it, install it again with an unrestricted key: `scp deploy/plesk/receive.sh user@host:/example.com/deploy-receive.sh && ssh user@host chmod 700 /example.com/deploy-receive.sh`.
 - **Startup errors:** `tmp/startup.log` on the server.
 - **Security headers:** the production build sends a hash-based Content Security Policy, HSTS and the usual hardening headers ([ADR 0029](adr/0029-security-headers.md)). A new external source (image host, script, embed) has to be added to `server/utils/security-headers.ts`.
 

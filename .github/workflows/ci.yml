@@ -39,6 +39,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Deploy receive script tests
+        run: bash deploy/plesk/receive.test.sh
+
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest

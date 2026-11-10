@@ -2,6 +2,7 @@
 # Deploys the current checkout to the Plesk Node.js host (docs/adr/0028-plesk-deployment.md).
 #
 #   DEPLOY_SSH=user@host DEPLOY_PATH=/example.com DEPLOY_URL=https://example.com scripts/deploy-plesk.sh
+#   … scripts/deploy-plesk.sh --rollback   # swap .output and .output.prev back
 #
 # DEPLOY_SSH   SSH target; the key must already be loaded (ssh-agent, ~/.ssh).
 # DEPLOY_PATH  the app root on the server, as the SSH session sees it. It holds
@@ -9,11 +10,22 @@
 # DEPLOY_URL   optional; checked for a 200 on /login after the restart.
 # DEPLOY_NODE_ABI  Node ABI of the server's Node.js (default 137 = Node 24).
 # DEPLOY_ALLOW_DIRTY=1  deploy with uncommitted changes (local runs only).
+# DEPLOY_REQUIRE_LOCKED_KEY=1  fail unless the key can run nothing but the
+#              receive script (set in CI, docs/adr/0033-deploy-key-forced-command.md).
 #
 # The server has no Node.js in the SSH shell and no rsync: the build happens
 # here, better-sqlite3's native addon is swapped for the official linux-x64
-# build, and the release goes up as a tarball. .env and data/ are never touched.
+# build, and the release goes up as a tarball to deploy/plesk/receive.sh,
+# installed on the server as $DEPLOY_PATH/deploy-receive.sh. That script checks
+# it and switches over. .env and data/ are never touched.
 set -euo pipefail
+
+mode=deploy
+case "${1:-}" in
+  '') ;;
+  --rollback) mode=rollback ;;
+  *) echo "usage: $0 [--rollback]" >&2; exit 1 ;;
+esac
 
 : "${DEPLOY_SSH:?set DEPLOY_SSH (user@host)}"
 : "${DEPLOY_PATH:?set DEPLOY_PATH (app root on the server)}"
@@ -26,16 +38,69 @@ fi
 
 cd "$(dirname "$0")/.."
 
+ssh_run() {
+  ssh -o BatchMode=yes "$DEPLOY_SSH" "$@"
+}
+
+# With the deploy key the server ignores the path and only reads the verb
+# (forced command); an unrestricted key runs the script itself.
+receive="$DEPLOY_PATH/deploy-receive.sh"
+
+sha256() {
+  if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
+}
+
+echo "== Check the server's receive script"
+expected="$(sha256 deploy/plesk/receive.sh)"
+installed="$(ssh_run "$receive version" < /dev/null || true)"
+if [[ "$installed" != "$expected" ]]; then
+  echo "The server's $receive is missing or differs from deploy/plesk/receive.sh" >&2
+  echo "(server: ${installed:-none}, here: $expected). Install it by hand; see docs/adr/0033-deploy-key-forced-command.md." >&2
+  exit 1
+fi
+if [[ "${DEPLOY_REQUIRE_LOCKED_KEY:-}" == 1 ]]; then
+  # The forced command answers anything but its verbs with exit 2 and runs nothing.
+  set +e
+  probe="$(ssh_run 'id' < /dev/null 2>&1)"
+  probe_status=$?
+  set -e
+  if [[ "$probe_status" != 2 || "$probe" == *uid=* ]]; then
+    echo "The deploy key can still run other commands (exit $probe_status); expected the forced command to refuse 'id'." >&2
+    exit 1
+  fi
+  echo "The key runs the receive script only"
+fi
+
+health_check() {
+  [[ -n "${DEPLOY_URL:-}" ]] || return 0
+  echo "== Health check"
+  for attempt in $(seq 1 20); do
+    status="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 20 "$DEPLOY_URL/login" || true)"
+    if [[ "$status" == 200 ]]; then
+      echo "/login answers 200"
+      return 0
+    fi
+    if [[ "$attempt" == 20 ]]; then
+      echo "/login still answers $status; see tmp/startup.log on the server." >&2
+      exit 1
+    fi
+    sleep 3
+  done
+}
+
+if [[ "$mode" == rollback ]]; then
+  echo "== Roll back"
+  ssh_run "$receive rollback" < /dev/null
+  health_check
+  exit 0
+fi
+
 if [[ -n "$(git status --porcelain)" && "${DEPLOY_ALLOW_DIRTY:-}" != 1 ]]; then
   echo "Uncommitted changes; commit them or set DEPLOY_ALLOW_DIRTY=1." >&2
   exit 1
 fi
 revision="$(git rev-parse HEAD)"
 echo "Deploying $(git log -1 --format='%h %s')"
-
-ssh_run() {
-  ssh -o BatchMode=yes "$DEPLOY_SSH" "$@"
-}
 
 echo "== Build"
 pnpm build
@@ -65,67 +130,9 @@ if ! file "$addon_dir/build/Release/better_sqlite3.node" | grep -q 'ELF 64-bit.*
 fi
 echo "better-sqlite3 ${sqlite_version}: linux-x64, Node ABI ${NODE_ABI}"
 
-echo "== Upload"
-COPYFILE_DISABLE=1 tar --no-xattrs -czf - -C "$stage" . \
-  | ssh_run "set -e; cd '$DEPLOY_PATH'; rm -rf .deploy-incoming; mkdir .deploy-incoming; tar -xzf - -C .deploy-incoming"
+echo "== Upload and switch over"
+COPYFILE_DISABLE=1 tar --no-xattrs -czf - -C "$stage" . | ssh_run "$receive deploy"
 
-echo "== Switch over"
-ssh_run bash -s -- "$DEPLOY_PATH" <<'REMOTE'
-set -euo pipefail
-cd "$1"
-incoming=.deploy-incoming
-test -f "$incoming/.output/server/index.mjs"
-
-# Database backup before the restart runs any new migration; keep the last 5.
-if [ -f data/app.db ]; then
-  backup="data/backups/$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$backup"
-  cp -p data/app.db* "$backup/"
-  ls -1d data/backups/*/ | sort | head -n -5 | xargs -r rm -rf
-fi
-
-# The previous build stays as .output.prev for a manual rollback.
-rm -rf .output.prev
-if [ -d .output ]; then mv .output .output.prev; fi
-mv "$incoming/.output" .output
-mkdir -p server/db
-rm -rf server/db/migrations
-mv "$incoming/migrations" server/db/migrations
-mv "$incoming/server.cjs" server.cjs
-mv "$incoming/REVISION" REVISION
-rmdir "$incoming"
-
-# Only the document root is served; everything else stays private to this user.
-chmod 600 server.cjs
-chmod -R go-rwx .output server
-chmod 711 .output
-
-# Public files into the document root (Node.js serves them too, so the short
-# gap while copying doesn't break a page).
-mkdir -p httpdocs
-find httpdocs -mindepth 1 -delete
-cp -R .output/public/. httpdocs/
-# The folder itself keeps Plesk's permissions; only its contents are ours.
-find httpdocs -mindepth 1 -exec chmod u+rwX,go+rX,go-w {} +
-
-mkdir -p tmp
-touch tmp/restart.txt
-REMOTE
-
-if [[ -n "${DEPLOY_URL:-}" ]]; then
-  echo "== Health check"
-  for attempt in $(seq 1 20); do
-    status="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 20 "$DEPLOY_URL/login" || true)"
-    if [[ "$status" == 200 ]]; then
-      echo "/login answers 200"
-      break
-    fi
-    if [[ "$attempt" == 20 ]]; then
-      echo "/login still answers $status; see tmp/startup.log on the server." >&2
-      exit 1
-    fi
-    sleep 3
-  done
-fi
+health_check
 
 echo "Deployed $revision"

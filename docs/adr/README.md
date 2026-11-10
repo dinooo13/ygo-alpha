@@ -35,8 +35,9 @@ mark the old as superseded.
 | [0025](0025-primary-artwork-and-set-facet.md) | Primary artwork and the set facet | Accepted |
 | [0026](0026-proposal-ends-the-assistant-turn.md) | A proposal ends the assistant turn | Accepted |
 | [0027](0027-invite-code-and-admin-token.md) | Invite-only sign-up and an admin token for the catalog syncs | Accepted |
-| [0028](0028-plesk-deployment.md) | Deployment to the Plesk host | Accepted |
+| [0028](0028-plesk-deployment.md) | Deployment to the Plesk host | Accepted (remote steps moved into a forced command by [0033](0033-deploy-key-forced-command.md)) |
 | [0029](0029-security-headers.md) | Security headers and a hash-based Content Security Policy | Accepted |
 | [0030](0030-edison-format.md) | Edison as a built-in format with a static banlist | Accepted |
 | [0031](0031-tournament-league-scoring.md) | Tournament scoring, byes, no draws, league tables and withdrawing | Accepted |
 | [0032](0032-collections-built-by-moving-copies.md) | Collections are built by moving copies out of the inventory | Accepted |
+| [0033](0033-deploy-key-forced-command.md) | The deploy key runs one fixed script | Accepted |
