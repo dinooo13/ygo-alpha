@@ -27,6 +27,11 @@ describe('inlineScriptHashes', () => {
     expect(inlineScriptHashes('<script src="/a.js"></script><script type="application/ld+json">{}</script>')).toEqual([])
   })
 
+  it('hashes an inline import map, which script-src governs too (Nuxt >= 4.6 maps #entry)', () => {
+    const importMap = '{"imports":{"#entry":"/_nuxt/entry.js"}}'
+    expect(inlineScriptHashes(`<script type="importmap">${importMap}</script>`)).toEqual([sha256(importMap)])
+  })
+
   it('hashes an inline module script', () => {
     expect(inlineScriptHashes('<script type="module">import "/a.js"</script>')).toEqual([sha256('import "/a.js"')])
   })

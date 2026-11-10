@@ -8,9 +8,11 @@ import { getAuthSession } from '~/utils/session'
  * stays on one page (filters, `?card=` overlays) is noticed here, by the
  * page's next API call.
  *
- * Every `$fetch` and `useFetch` on the client goes through `globalThis.$fetch`
- * at call time, so a default `onResponseError` hook covers them all; a call
- * that passes its own `onResponseError` replaces this default (none does).
+ * The hook sits on `window.fetch`, not on `globalThis.$fetch`: since Nuxt 4.5
+ * the auto-imported `$fetch` is a snapshot taken at app boot, before plugins
+ * run, so a replaced `globalThis.$fetch` no longer reaches `$fetch` or
+ * `useFetch` calls. ofetch looks up `globalThis.fetch` on every request, so
+ * this covers them all, and plain `fetch` calls too.
  */
 export default defineNuxtPlugin({
   name: 'api-unauthorized',
@@ -22,13 +24,14 @@ export default defineNuxtPlugin({
       redirect: target => nuxtApp.runWithContext(() => navigateTo(target)),
     })
 
-    globalThis.$fetch = globalThis.$fetch.create({
-      onResponseError({ request, response }) {
-        if (response.status === 401 && isProtectedApiRequest(request, window.location.origin)) {
-          // Not awaited: the caller gets its error at once and shows its own state meanwhile.
-          void onUnauthorized()
-        }
-      },
-    }) as typeof globalThis.$fetch
+    const fetch = window.fetch.bind(window)
+    window.fetch = async (input, init) => {
+      const response = await fetch(input, init)
+      if (response.status === 401 && isProtectedApiRequest(input, window.location.origin)) {
+        // Not awaited: the caller gets its response at once and shows its own state meanwhile.
+        void onUnauthorized()
+      }
+      return response
+    }
   },
 })

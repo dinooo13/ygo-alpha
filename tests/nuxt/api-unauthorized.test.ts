@@ -117,6 +117,9 @@ function unauthorized(): never {
   throw createError({ statusCode: 401, statusMessage: 'Authentication required' })
 }
 
+// The plugin hooks `window.fetch`, which every `$fetch`/`useFetch` call goes
+// through in the app. The test environment's own `$fetch` holds the fetch it
+// was created with, so these tests call `fetch` directly.
 describe('the api-unauthorized plugin', () => {
   it('redirects a protected page to /login when an API call answers 401 without a session', async () => {
     const router = useRouter()
@@ -129,7 +132,7 @@ describe('the api-unauthorized plugin', () => {
     vi.mocked(getAuthSession).mockResolvedValue(null)
     const unregister = registerEndpoint('/api/inventory', unauthorized)
     try {
-      await expect($fetch('/api/inventory')).rejects.toMatchObject({ statusCode: 401 })
+      expect((await fetch('/api/inventory')).status).toBe(401)
       await vi.waitFor(() => {
         expect(router.currentRoute.value.path).toBe('/login')
       })
@@ -150,7 +153,7 @@ describe('the api-unauthorized plugin', () => {
     vi.mocked(getAuthSession).mockResolvedValue(null)
     const unregister = registerEndpoint('/api/auth/sign-in/email', { method: 'POST', handler: unauthorized })
     try {
-      await expect($fetch('/api/auth/sign-in/email', { method: 'POST' })).rejects.toMatchObject({ statusCode: 401 })
+      expect((await fetch('/api/auth/sign-in/email', { method: 'POST' })).status).toBe(401)
       await new Promise(resolve => setTimeout(resolve, 20))
       expect(getAuthSession).not.toHaveBeenCalled()
       expect(router.currentRoute.value.path).toBe('/inventory')
