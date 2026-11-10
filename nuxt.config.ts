@@ -19,6 +19,20 @@ export default defineNuxtConfig({
   ui: {
     fonts: false,
   },
+  // Every icon the app names ships in the client bundle, so the browser
+  // never fetches one. Icons the SSR HTML didn't carry (a page reached by
+  // client-side navigation, a dialog) used to be fetched at runtime, and with
+  // @nuxt/icon 2.6.2 + @iconify/vue 5.0.5 that fetch skips our own
+  // /api/_nuxt_icon and goes to api.iconify.design, which the CSP's
+  // `connect-src 'self'` blocks: the icons stayed blank. The scan also reads
+  // .ts files (app/utils/card-level.ts names icons); its default is .vue only.
+  icon: {
+    clientBundle: {
+      scan: {
+        globInclude: ['app/**/*.{vue,ts}', 'shared/**/*.{vue,ts}'],
+      },
+    },
+  },
   typescript: {
     strict: true,
   },
