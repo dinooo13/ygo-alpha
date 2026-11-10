@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted.
+Accepted. The remote steps of point 3 and the key of point 4 changed with
+[0033](0033-deploy-key-forced-command.md): the server runs them in a fixed
+script, and the deploy key can run nothing else.
 
 ## Context
 
