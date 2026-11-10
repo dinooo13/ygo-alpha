@@ -31,4 +31,12 @@ describe('isPublicPath', () => {
     expect(isPublicPath('/spieler/x')).toBe(false)
     expect(isPublicPath('/')).toBe(false)
   })
+
+  it('does not treat a case variant of /players as public', () => {
+    // vue-router matches paths case-insensitively, so /Players/x renders the
+    // shared page. The allowlist stays exact: a case variant needs a session,
+    // never the other way round (GHSA-hxvh-4h3w-prp9, e2e/mixed-case-paths.spec.ts).
+    expect(isPublicPath('/Players/dino')).toBe(false)
+    expect(isPublicPath('/PLAYERS')).toBe(false)
+  })
 })

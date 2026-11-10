@@ -20,6 +20,22 @@ async function useColorMode(page: Page, mode: typeof COLOR_MODES[number]) {
   await page.emulateMedia({ reducedMotion: 'reduce' })
 }
 
+/**
+ * Waits until no animation is running. Opening a dialog over another can
+ * cancel the lower one's animation, whose `finished` then rejects; a
+ * cancelled animation is over too, and the loop picks up any that started
+ * meanwhile.
+ */
+async function settleAnimations(page: Page) {
+  await page.evaluate(async () => {
+    for (let round = 0; round < 10; round++) {
+      const running = document.getAnimations().filter(animation => animation.playState === 'running')
+      if (running.length === 0) return
+      await Promise.allSettled(running.map(animation => animation.finished))
+    }
+  })
+}
+
 /** Runs axe on the page as it is now; `label` names it in the violations. */
 async function axeCurrent(page: Page, label: string): Promise<string[]> {
   const results = await new AxeBuilder({ page })
@@ -94,7 +110,7 @@ test.describe('axe: no WCAG A/AA violations', () => {
         await page.waitForLoadState('networkidle')
         // The open animation (fade/scale) runs even under reduced motion;
         // mid-way its colors would fail the contrast check.
-        await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished)))
+        await settleAnimations(page)
         violations.push(...await axeCurrent(page, `inventory card overlay (${label})`))
       }
 
@@ -103,7 +119,7 @@ test.describe('axe: no WCAG A/AA violations', () => {
       await waitForHydration(page)
       await page.getByRole('dialog', { name: CARD.darkMagician }).getByRole('button', { name: 'Zum Inventar' }).click()
       await expect(page.getByRole('dialog', { name: 'Karte hinzufügen' })).toBeVisible()
-      await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished)))
+      await settleAnimations(page)
       violations.push(...await axeCurrent(page, 'catalog card overlay + add dialog'))
 
       expect(violations).toEqual([])

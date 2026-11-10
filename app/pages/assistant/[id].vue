@@ -71,10 +71,10 @@ async function onDeleted(id: string) {
 </script>
 
 <template>
-  <!-- Exactly the height below the mobile header (56px) and the main
-       padding (2 × 16px; 2 × 32px from lg), so the page itself never scrolls:
-       the thread scrolls inside and the composer stays in view. -->
   <div class="flex h-[calc(100dvh-5.5rem)] min-h-0 flex-col gap-4 lg:h-[calc(100dvh-4rem)] lg:gap-6">
+    <!-- Exactly the height below the mobile header (56px) and the main
+         padding (2 × 16px; 2 × 32px from lg), so the page itself never scrolls:
+         the thread scrolls inside and the composer stays in view. -->
     <LayoutPageHeader
       :eyebrow="t('assistant.title')"
       truncate

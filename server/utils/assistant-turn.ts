@@ -15,6 +15,7 @@ import {
   isStepCount,
   pruneMessages,
   streamText,
+  ToolChoiceViolationError,
 } from 'ai'
 import type {
   FinishReason,
@@ -101,6 +102,14 @@ export function toolFailureCounts(steps: ReadonlyArray<StepContent>): Map<string
 
 export function maxToolFailureCount(steps: ReadonlyArray<StepContent>): number {
   return Math.max(0, ...toolFailureCounts(steps).values())
+}
+
+/**
+ * The SDK's answer to a model that still calls a tool after
+ * `assistantPrepareStep` switched tools off (`toolChoice: 'none'`, #54).
+ */
+function isToolsOffViolation(error: unknown): boolean {
+  return ToolChoiceViolationError.isInstance(error) && error.toolChoice.type === 'none'
 }
 
 /** Stops the loop once one identical tool call failed `limit` times — the backstop behind `assistantPrepareStep`. */
@@ -439,7 +448,9 @@ export function startAssistantTurn(options: AssistantTurnOptions): AssistantTurn
     resolveDone = resolve
   })
 
-  type RunStatus = 'done' | 'error' | 'cancelled' | 'timeout'
+  // 'tools-ignored': the model called a tool on a step where tools were
+  // switched off (#54); the SDK ends the run with a ToolChoiceViolationError.
+  type RunStatus = 'done' | 'error' | 'cancelled' | 'timeout' | 'tools-ignored'
 
   async function runModel(writer: UIMessageStreamWriter<AssistantUIMessage>, fields: {
     instructions: string
@@ -462,18 +473,23 @@ export function startAssistantTurn(options: AssistantTurnOptions): AssistantTurn
       headers: { 'x-opencode-session': conversationId },
       // The client gets the error as a code, with the provider's hint for a model setup problem (`assistantStreamErrorText`, #124); the log keeps the cause.
       onError: ({ error }) => {
+        if (isToolsOffViolation(error)) return
         console.warn(`[assistant] model call failed (${assistantErrorCode(error)}):`, error instanceof Error ? error.message : error)
       },
     })
 
     let status: RunStatus = 'done'
+    let toolsIgnored = false
     const uiStream = result.toUIMessageStream<AssistantUIMessage>({
       sendReasoning: true,
       sendStart: fields.sendStart,
       sendFinish: false,
       generateMessageId: () => assistantId,
       messageMetadata: ({ part }) => part.type === 'start' ? { createdAt, model: modelId } : undefined,
-      onError: assistantStreamErrorText,
+      onError: (error) => {
+        if (isToolsOffViolation(error)) toolsIgnored = true
+        return assistantStreamErrorText(error)
+      },
     })
     for await (const chunk of uiStream) {
       if (chunk.type === 'abort') {
@@ -492,6 +508,11 @@ export function startAssistantTurn(options: AssistantTurnOptions): AssistantTurn
         continue
       }
       if (chunk.type === 'error') {
+        if (toolsIgnored) {
+          // Not a model failure: the turn ends with the repeated-failure text.
+          status = 'tools-ignored'
+          continue
+        }
         status = 'error'
       }
       if (chunk.type === 'tool-input-error') {
@@ -571,6 +592,11 @@ export function startAssistantTurn(options: AssistantTurnOptions): AssistantTurn
         if (run.status === 'timeout') {
           writeText(writer, turnText.timeout)
           writer.write({ type: 'finish', finishReason: 'other' })
+          return
+        }
+        if (run.status === 'tools-ignored') {
+          writeText(writer, turnText.repeatedToolFailure)
+          writer.write({ type: 'finish', finishReason: 'stop' })
           return
         }
         if (run.status !== 'done') {

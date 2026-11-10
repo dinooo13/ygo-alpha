@@ -23,8 +23,10 @@ export const HSTS_HEADER = 'max-age=31536000'
 /** Card images are hotlinked from YGOPRODeck (ADR 0001). */
 const IMAGE_HOSTS = ['https://images.ygoprodeck.com']
 
-// Script types the browser doesn't execute, so they need no hash.
-const DATA_SCRIPT_TYPES = new Set(['application/json', 'application/ld+json', 'importmap'])
+// Script types the browser doesn't execute, so they need no hash. An inline
+// import map is not one of them: `script-src` governs it like a script, and
+// Nuxt >= 4.6 maps its `#entry` chunk with one.
+const DATA_SCRIPT_TYPES = new Set(['application/json', 'application/ld+json'])
 
 const INLINE_SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi
 
