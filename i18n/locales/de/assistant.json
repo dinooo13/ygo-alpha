@@ -108,7 +108,8 @@
         "quantity": "Menge",
         "newQuantity": "Neue Menge",
         "section": "Sektion",
-        "collectionId": "Sammlung"
+        "collectionId": "Sammlung",
+        "printing": "Printing"
       },
       "unknownCollection": "Unbekannte Sammlung",
       "meta": {

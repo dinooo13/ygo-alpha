@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { getQuery } from 'h3'
 import { useDb } from '../../../db'
-import { catalogCard, collection, ownedCard } from '../../../db/schema'
+import { catalogCard, catalogPrinting, collection, ownedCard } from '../../../db/schema'
 import { assertCollectionOwnedByUser } from '../../../utils/collections'
 import {
   buildInventorySearchWhere,
@@ -91,6 +91,31 @@ export default defineEventHandler(async (event) => {
     .groupBy(ownedCard.catalogCardId, ownedCard.collectionId)
     .all()
 
+  // The printings behind each tile (ADR 0034): known printings only, with
+  // the copies under the same `where`, so they add up within the total.
+  const printingRows = db
+    .select({
+      catalogCardId: ownedCard.catalogCardId,
+      printingId: ownedCard.printingId,
+      setCode: catalogPrinting.setCode,
+      rarity: catalogPrinting.rarity,
+      rarityCode: catalogPrinting.rarityCode,
+      quantity: sql<number>`sum(${ownedCard.quantity})`,
+    })
+    .from(ownedCard)
+    .innerJoin(catalogCard, eq(ownedCard.catalogCardId, catalogCard.id))
+    .innerJoin(catalogPrinting, eq(ownedCard.printingId, catalogPrinting.id))
+    .where(and(where, inArray(ownedCard.catalogCardId, catalogCardIds)))
+    .groupBy(ownedCard.catalogCardId, ownedCard.printingId)
+    .orderBy(asc(catalogPrinting.setCode))
+    .all()
+  const printingsByCardId = new Map<number, Array<{ printingId: string, setCode: string, rarity: string | null, rarityCode: string | null, quantity: number }>>()
+  for (const { catalogCardId, printingId, ...printing } of printingRows) {
+    const list = printingsByCardId.get(catalogCardId) ?? []
+    list.push({ printingId: printingId!, ...printing })
+    printingsByCardId.set(catalogCardId, list)
+  }
+
   const displayByCardId = loadInventoryCardDisplay(db, catalogCardIds)
 
   const breakdownByCardId = new Map<
@@ -121,6 +146,7 @@ export default defineEventHandler(async (event) => {
       retired: display?.retired ?? false,
       totalQuantity: row.totalQuantity,
       collectionBreakdown: breakdownByCardId.get(row.catalogCardId) ?? [],
+      printingBreakdown: printingsByCardId.get(row.catalogCardId) ?? [],
     }
   })
 

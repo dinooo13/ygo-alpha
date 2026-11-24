@@ -19,15 +19,16 @@
 // Everything runs in one synchronous transaction (better-sqlite3).
 //
 // Then `pruneUnlistedCatalogRows` deletes the printings and images the
-// response no longer lists (ADR 0023).
+// response no longer lists (ADR 0023). An owned card's printing (ADR 0034)
+// moves to the matching listed printing first, so the copies keep it.
 
-import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import type { useDb } from '../db'
 import { catalogCard, catalogCardImage, catalogPrinting, deck, deckCard, ownedCard, ruleFormat, wishlistItem } from '../db/schema'
 import type { Rule, RuleSet } from '../../shared/rule-formats'
 import { chunkRows } from './catalog-sync'
 import { MAX_DECK_CARD_QUANTITY } from './decks'
-import { joinNotes } from './inventory'
+import { joinNotes, sameTupleWhere } from './inventory'
 
 type Db = ReturnType<typeof useDb>
 
@@ -267,48 +268,145 @@ function resolveReplacements(db: Db): Map<number, number> {
   return replacements
 }
 
-// Owned cards merge like two rows that end up with the same
-// `(user, card, collection)` tuple elsewhere (ADR 0017, migration 0014):
-// quantities add up (no cap), the distinct notes are joined. Unlike a user
-// edit, the sync keeps the later `updated_at` instead of bumping it.
+type OwnedCardRow = typeof ownedCard.$inferSelect
+type PrintingRow = Pick<typeof catalogPrinting.$inferSelect, 'id' | 'cardId' | 'setCode' | 'rarity' | 'rarityCode'>
+
+/**
+ * The printing among `candidates` (one card's printings) that stands for
+ * `printing`: the same set code and rarity code, else the same set code and
+ * rarity name, else the only one with that set code. `null` when there is no
+ * certain match; the copies then become "printing unknown".
+ */
+export function matchPrinting(
+  printing: Pick<PrintingRow, 'setCode' | 'rarity' | 'rarityCode'>,
+  candidates: PrintingRow[],
+): PrintingRow | null {
+  const setCode = printing.setCode.trim().toLowerCase()
+  const sameSetCode = candidates.filter(candidate => candidate.setCode.trim().toLowerCase() === setCode)
+  const only = (list: PrintingRow[]) => list.length === 1 ? list[0]! : null
+
+  if (printing.rarityCode) {
+    const match = only(sameSetCode.filter(candidate => candidate.rarityCode === printing.rarityCode))
+    if (match) {
+      return match
+    }
+  }
+  const rarity = printing.rarity?.trim().toLowerCase()
+  if (rarity) {
+    const match = only(sameSetCode.filter(candidate => candidate.rarity?.trim().toLowerCase() === rarity))
+    if (match) {
+      return match
+    }
+  }
+  return only(sameSetCode)
+}
+
+/**
+ * Moves an owned row to another card and/or printing. When the user already
+ * has a stack with that tuple (ADR 0034: user, card, collection, printing),
+ * the row merges into it like two rows that end up with the same tuple
+ * elsewhere (ADR 0017, migration 0014): quantities add up (no cap), the
+ * distinct notes are joined. Unlike a user edit, the sync keeps the later
+ * `updated_at` instead of bumping it.
+ */
+function moveOwnedRow(db: Db, row: OwnedCardRow, to: { catalogCardId: number, printingId: string | null }) {
+  const target = db
+    .select()
+    .from(ownedCard)
+    .where(sameTupleWhere(row.userId, { ...to, collectionId: row.collectionId }, row.id))
+    .get()
+
+  if (target) {
+    db.update(ownedCard)
+      .set({
+        quantity: target.quantity + row.quantity,
+        note: joinNotes(target.note, row.note),
+        updatedAt: laterDate(target.updatedAt, row.updatedAt),
+      })
+      .where(eq(ownedCard.id, target.id))
+      .run()
+    db.delete(ownedCard).where(eq(ownedCard.id, row.id)).run()
+  }
+  else {
+    db.update(ownedCard)
+      .set({ catalogCardId: to.catalogCardId, printingId: to.printingId })
+      .where(eq(ownedCard.id, row.id))
+      .run()
+  }
+}
+
+function printingsOfCards(db: Db, cardIds: number[]): PrintingRow[] {
+  if (cardIds.length === 0) {
+    return []
+  }
+  return db
+    .select({
+      id: catalogPrinting.id,
+      cardId: catalogPrinting.cardId,
+      setCode: catalogPrinting.setCode,
+      rarity: catalogPrinting.rarity,
+      rarityCode: catalogPrinting.rarityCode,
+    })
+    .from(catalogPrinting)
+    .where(inArray(catalogPrinting.cardId, cardIds))
+    .all()
+}
+
+// Owned cards move to the replacement card; a printing moves to the
+// replacement's matching printing (`matchPrinting`), else it is dropped.
 function remapOwnedCards(db: Db, replacements: Map<number, number>): number {
   let count = 0
   for (const oldIds of chunkRows([...replacements.keys()], ID_CHUNK_SIZE)) {
     const rows = db.select().from(ownedCard).where(inArray(ownedCard.catalogCardId, oldIds)).all()
+    const printingIds = [...new Set(rows.map(row => row.printingId).filter((id): id is string => id !== null))]
+    const oldPrintings = new Map(
+      (printingIds.length === 0
+        ? []
+        : db.select().from(catalogPrinting).where(inArray(catalogPrinting.id, printingIds)).all()
+      ).map(printing => [printing.id, printing]),
+    )
+    const newPrintings = printingsOfCards(db, [...new Set(rows.map(row => replacements.get(row.catalogCardId)!))])
+
     for (const row of rows) {
       const newId = replacements.get(row.catalogCardId)!
-      const target = db
-        .select()
-        .from(ownedCard)
-        .where(and(
-          eq(ownedCard.userId, row.userId),
-          eq(ownedCard.catalogCardId, newId),
-          row.collectionId === null ? isNull(ownedCard.collectionId) : eq(ownedCard.collectionId, row.collectionId),
-          ne(ownedCard.id, row.id),
-        ))
-        .get()
-
-      if (target) {
-        db.update(ownedCard)
-          .set({
-            quantity: target.quantity + row.quantity,
-            note: joinNotes(target.note, row.note),
-            updatedAt: laterDate(target.updatedAt, row.updatedAt),
-          })
-          .where(eq(ownedCard.id, target.id))
-          .run()
-        db.delete(ownedCard).where(eq(ownedCard.id, row.id)).run()
-      }
-      else {
-        db.update(ownedCard)
-          .set({ catalogCardId: newId, printingId: null })
-          .where(eq(ownedCard.id, row.id))
-          .run()
-      }
+      const oldPrinting = row.printingId ? oldPrintings.get(row.printingId) : undefined
+      const printing = oldPrinting
+        ? matchPrinting(oldPrinting, newPrintings.filter(candidate => candidate.cardId === newId))
+        : null
+      moveOwnedRow(db, row, { catalogCardId: newId, printingId: printing?.id ?? null })
       count += 1
     }
   }
   return count
+}
+
+/**
+ * Before printings are pruned: every owned stack on one of `prunedIds` moves
+ * to the matching printing that stays (`matchPrinting` among `kept`), else
+ * to "printing unknown" — merging with an existing stack where the tuple
+ * collides. Without this, the FK's `ON DELETE SET NULL` would drop the
+ * printing silently and could leave two stacks with the same tuple. Returns
+ * how many stacks kept a printing.
+ */
+function repointPrunedOwnedPrintings(db: Db, prunedIds: string[], kept: (printing: PrintingRow) => boolean): number {
+  let repointed = 0
+  for (const ids of chunkRows(prunedIds, ID_CHUNK_SIZE)) {
+    const rows = db.select().from(ownedCard).where(inArray(ownedCard.printingId, ids)).all()
+    if (rows.length === 0) {
+      continue
+    }
+    const pruned = new Map(db.select().from(catalogPrinting).where(inArray(catalogPrinting.id, ids)).all().map(p => [p.id, p]))
+    const candidates = printingsOfCards(db, [...new Set(rows.map(row => row.catalogCardId))]).filter(kept)
+    for (const row of rows) {
+      const old = pruned.get(row.printingId!)
+      const match = old ? matchPrinting(old, candidates.filter(candidate => candidate.cardId === row.catalogCardId)) : null
+      moveOwnedRow(db, row, { catalogCardId: row.catalogCardId, printingId: match?.id ?? null })
+      if (match) {
+        repointed += 1
+      }
+    }
+  }
+  return repointed
 }
 
 function remapDeckCards(db: Db, replacements: Map<number, number>): number {
@@ -489,9 +587,9 @@ export interface CatalogCleanupResult {
  *   the only picture of a card users may still hold.
  * - Retired cards with a replacement lose their stale placeholder image;
  *   `CardFloatingImage` / `CardThumb` render a card without one.
- * - Deleting a printing sets the legacy `owned_card.printing_id` to NULL
- *   through its FK (`ON DELETE SET NULL`); that column has been hidden since
- *   ADR 0017, so no user data is lost.
+ * - An owned stack on a deleted printing moves to the matching listed
+ *   printing (same card and set code, same rarity; ADR 0034), else to
+ *   "printing unknown"; its copies always stay.
  * - `catalog_set` rows stay (format set filters reference set ids), and so
  *   do the translations.
  *
@@ -513,12 +611,14 @@ export function pruneUnlistedCatalogRows(
         .map(row => row.id),
     )
 
+    const isKept = (row: { id: string, cardId: number }) => options.seenPrintingIds.has(row.id) || keep.has(row.cardId)
     const printingIds = tx
       .select({ id: catalogPrinting.id, cardId: catalogPrinting.cardId })
       .from(catalogPrinting)
       .all()
-      .filter(row => !options.seenPrintingIds.has(row.id) && !keep.has(row.cardId))
+      .filter(row => !isKept(row))
       .map(row => row.id)
+    repointPrunedOwnedPrintings(tx, printingIds, isKept)
     for (const ids of chunkRows(printingIds, ID_CHUNK_SIZE)) {
       tx.delete(catalogPrinting).where(inArray(catalogPrinting.id, ids)).run()
     }

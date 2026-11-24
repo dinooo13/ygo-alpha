@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { CATALOG_FIXTURE_IDS, seedCatalogFixture } from '../../server/db/fixtures/catalog-fixture'
 import * as schema from '../../server/db/schema'
 import { UNASSIGNED_COLLECTION_ID } from '../../shared/inventory'
+import { printingKey } from '../../shared/printing'
 import { createCollection } from '../../server/utils/collections'
 import {
   fillCollectionFromDeck,
@@ -99,6 +100,25 @@ describe('"Sammlung aus Deck befüllen"', () => {
     expect(result.moved).toBe(4)
     // No copy is created or lost: the inventory total per card is unchanged.
     expect(ownedQuantitiesByCard(db, ME, [darkMagician, potOfGreed])).toEqual(new Map([[darkMagician, 7], [potOfGreed, 1]]))
+  })
+
+  it('takes from every printing stack of a source and the copies keep their printing (ADR 0034)', async () => {
+    const lob = printingKey({ cardId: darkMagician, setCode: 'LOB-005', rarityCode: 'UR' })
+    const sdy = printingKey({ cardId: darkMagician, setCode: 'SDY-006', rarityCode: 'UR' })
+    await addOwnedCard(db, ME, validateInventoryInput({ catalog_card_id: darkMagician, quantity: 1, collection_id: box, printingId: lob }))
+    await addOwnedCard(db, ME, validateInventoryInput({ catalog_card_id: darkMagician, quantity: 1, collection_id: box, printingId: sdy }))
+    await addOwnedCard(db, ME, validateInventoryInput({ catalog_card_id: darkMagician, quantity: 1, collection_id: box }))
+
+    const result = fill({ sourceCollectionIds: [box] })
+
+    expect(result.cards.find(card => card.catalogCardId === darkMagician)).toMatchObject({ needed: 3, toMove: 3, missing: 0 })
+    expect(owned(db, darkMagician, target)).toBe(3)
+    expect(db.select().from(schema.ownedCard).all()
+      .filter(row => row.catalogCardId === darkMagician)
+      .map(row => `${row.collectionId === target ? 'target' : row.collectionId}/${row.printingId ?? '?'}`)
+      .sort()).toEqual(['target/?', `target/${lob}`, `target/${sdy}`].sort())
+    // The deck still counts every copy, whatever its printing (ADR 0004).
+    expect(ownedQuantitiesByCard(db, ME, [darkMagician])).toEqual(new Map([[darkMagician, 3]]))
   })
 
   it('reports a shortfall for cards the user does not own enough of', async () => {

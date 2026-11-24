@@ -17,6 +17,7 @@
 // Ten Thousand Dragon has `?` ATK/DEF (stored as -1): the overlay shows `?`,
 // and no format ATK/DEF range matches it (#140).
 import { foldCardName } from '../../../shared/card-name-fold'
+import { printingKey } from '../../../shared/printing'
 import type { useDb } from '../index'
 import { catalogCard, catalogCardImage, catalogCardTranslation, catalogPrinting, catalogSet } from '../schema'
 
@@ -472,25 +473,42 @@ export const CATALOG_FIXTURE_SETS: CatalogSetRow[] = [
   { id: 'duelist-alliance', name: 'Duelist Alliance' },
   { id: 'duel-devastator', name: 'Duel Devastator' },
   { id: 'battles-of-legend-armageddon', name: 'Battles of Legend: Armageddon' },
+  { id: 'legendary-collection', name: 'Legendary Collection' },
+  { id: 'legendary-collection-25th-anniversary-edition', name: 'Legendary Collection: 25th Anniversary Edition' },
 ]
 
+// A printing row keyed like the sync keys it (`printingKey`, ADR 0034).
+function printing(
+  cardId: number,
+  setId: string,
+  setCode: string,
+  rarity: string,
+  rarityCode: string | null,
+  price: string | null,
+): CatalogPrintingRow {
+  return { id: printingKey({ cardId, setCode, rarityCode, rarity }), cardId, setId, setCode, rarity, rarityCode, price }
+}
+
 export const CATALOG_FIXTURE_PRINTINGS: CatalogPrintingRow[] = [
-  { id: 'SDY-006', cardId: CATALOG_FIXTURE_IDS.darkMagician, setId: 'starter-deck-yugi', setCode: 'SDY-006', rarity: 'Ultra Rare', price: '9.96' },
-  { id: 'LOB-005', cardId: CATALOG_FIXTURE_IDS.darkMagician, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-005', rarity: 'Ultra Rare', price: '46.71' },
-  { id: 'LOB-001', cardId: CATALOG_FIXTURE_IDS.blueEyesWhiteDragon, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-001', rarity: 'Ultra Rare', price: '62.15' },
-  { id: 'MRD-003', cardId: CATALOG_FIXTURE_IDS.summonedSkull, setId: 'metal-raiders', setCode: 'MRD-003', rarity: 'Ultra Rare', price: '45.91' },
-  { id: 'MRD-071', cardId: CATALOG_FIXTURE_IDS.kuriboh, setId: 'metal-raiders', setCode: 'MRD-071', rarity: 'Super Rare', price: '6.04' },
-  { id: 'LOB-119', cardId: CATALOG_FIXTURE_IDS.potOfGreed, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-119', rarity: 'Rare', price: '4.2' },
-  { id: 'LOB-053', cardId: CATALOG_FIXTURE_IDS.raigeki, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-053', rarity: 'Super Rare', price: '26.05' },
-  { id: 'LOB-118', cardId: CATALOG_FIXTURE_IDS.monsterReborn, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-118', rarity: 'Ultra Rare', price: '27.29' },
-  { id: 'MRD-138', cardId: CATALOG_FIXTURE_IDS.mirrorForce, setId: 'metal-raiders', setCode: 'MRD-138', rarity: 'Ultra Rare', price: '15.47' },
-  { id: 'LDS2-EN018', cardId: CATALOG_FIXTURE_IDS.blueEyesUltimateDragon, setId: 'legendary-duelists-season-2', setCode: 'LDS2-EN018', rarity: 'Ultra Rare', price: null },
-  { id: 'TDGS-EN040', cardId: CATALOG_FIXTURE_IDS.stardustDragon, setId: 'the-duelist-genesis', setCode: 'TDGS-EN040', rarity: 'Ultra Rare', price: '31.54' },
-  { id: 'YS11-EN041', cardId: CATALOG_FIXTURE_IDS.utopia, setId: 'starter-deck-dawn-of-the-xyz', setCode: 'YS11-EN041', rarity: 'Ultra Rare', price: '3.05' },
-  { id: 'YS17-EN041', cardId: CATALOG_FIXTURE_IDS.decodeTalker, setId: 'starter-deck-link-strike', setCode: 'YS17-EN041', rarity: 'Ultra Rare', price: '1.47' },
-  { id: 'DUEA-EN004', cardId: CATALOG_FIXTURE_IDS.oddEyesPendulumDragon, setId: 'duelist-alliance', setCode: 'DUEA-EN004', rarity: 'Secret Rare', price: '7.54' },
-  { id: 'DUDE-EN028', cardId: CATALOG_FIXTURE_IDS.effectVeiler, setId: 'duel-devastator', setCode: 'DUDE-EN028', rarity: 'Ultra Rare', price: '5.91' },
-  { id: 'BLAR-EN10K', cardId: CATALOG_FIXTURE_IDS.tenThousandDragon, setId: 'battles-of-legend-armageddon', setCode: 'BLAR-EN10K', rarity: '10000 Secret Rare', price: '1961.53' },
+  printing(CATALOG_FIXTURE_IDS.darkMagician, 'starter-deck-yugi', 'SDY-006', 'Ultra Rare', 'UR', '9.96'),
+  printing(CATALOG_FIXTURE_IDS.darkMagician, 'legend-of-blue-eyes-white-dragon', 'LOB-005', 'Ultra Rare', 'UR', '46.71'),
+  printing(CATALOG_FIXTURE_IDS.blueEyesWhiteDragon, 'legend-of-blue-eyes-white-dragon', 'LOB-001', 'Ultra Rare', 'UR', '62.15'),
+  printing(CATALOG_FIXTURE_IDS.summonedSkull, 'metal-raiders', 'MRD-003', 'Ultra Rare', 'UR', '45.91'),
+  printing(CATALOG_FIXTURE_IDS.kuriboh, 'metal-raiders', 'MRD-071', 'Super Rare', 'SR', '6.04'),
+  printing(CATALOG_FIXTURE_IDS.potOfGreed, 'legend-of-blue-eyes-white-dragon', 'LOB-119', 'Rare', 'R', '4.2'),
+  printing(CATALOG_FIXTURE_IDS.raigeki, 'legend-of-blue-eyes-white-dragon', 'LOB-053', 'Super Rare', 'SR', '26.05'),
+  printing(CATALOG_FIXTURE_IDS.monsterReborn, 'legend-of-blue-eyes-white-dragon', 'LOB-118', 'Ultra Rare', 'UR', '27.29'),
+  printing(CATALOG_FIXTURE_IDS.mirrorForce, 'metal-raiders', 'MRD-138', 'Ultra Rare', 'UR', '15.47'),
+  printing(CATALOG_FIXTURE_IDS.blueEyesUltimateDragon, 'legendary-duelists-season-2', 'LDS2-EN018', 'Ultra Rare', 'UR', null),
+  printing(CATALOG_FIXTURE_IDS.stardustDragon, 'the-duelist-genesis', 'TDGS-EN040', 'Ultra Rare', 'UR', '31.54'),
+  printing(CATALOG_FIXTURE_IDS.utopia, 'starter-deck-dawn-of-the-xyz', 'YS11-EN041', 'Ultra Rare', 'UR', '3.05'),
+  printing(CATALOG_FIXTURE_IDS.decodeTalker, 'starter-deck-link-strike', 'YS17-EN041', 'Ultra Rare', 'UR', '1.47'),
+  printing(CATALOG_FIXTURE_IDS.oddEyesPendulumDragon, 'duelist-alliance', 'DUEA-EN004', 'Secret Rare', 'ScR', '7.54'),
+  printing(CATALOG_FIXTURE_IDS.effectVeiler, 'duel-devastator', 'DUDE-EN028', 'Ultra Rare', 'UR', '5.91'),
+  printing(CATALOG_FIXTURE_IDS.tenThousandDragon, 'battles-of-legend-armageddon', 'BLAR-EN10K', '10000 Secret Rare', '10000ScR', '1961.53'),
+  // One set code in two rarities, the second without a rarity code (ADR 0034).
+  printing(CATALOG_FIXTURE_IDS.blueEyesWhiteDragon, 'legendary-collection', 'LC01-EN004', 'Ultra Rare', 'UR', '3.10'),
+  printing(CATALOG_FIXTURE_IDS.blueEyesWhiteDragon, 'legendary-collection-25th-anniversary-edition', 'LC01-EN004', 'Quarter Century Secret Rare', null, '24.99'),
 ]
 
 export const CATALOG_FIXTURE_IMAGES: CatalogCardImageRow[] = [

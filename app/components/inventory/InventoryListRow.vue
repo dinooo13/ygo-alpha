@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * One "Liste" row of the inventory (#135): for reading, not editing. Name,
- * type, attribute and the start of the card text in the card language
- * (ADR 0015), the note, the quantity and the collection. The whole row
+ * type, attribute, the printing when it is known (ADR 0034), the start of
+ * the card text in the card language (ADR 0015), the note, the quantity and
+ * the collection. The whole row
  * opens the card's detail panel, where the copies are edited.
  *
  * The card name is the row's button; `stretched-link` makes the whole row
@@ -14,6 +15,7 @@
  */
 import { CARD_TEXT_EXCERPT_LENGTH } from '~~/shared/inventory'
 import { cardFrame } from '~~/shared/card-frame'
+import { printingShortLabel } from '~~/shared/printing'
 
 interface InventoryListItem {
   id: string
@@ -31,6 +33,11 @@ interface InventoryListItem {
   /** YGOPRODeck no longer lists the card (ADR 0019). */
   cardRetired?: boolean
   imageUrlSmall: string | null
+  /** The stack's printing (ADR 0034); `null` = printing unknown. */
+  printingSetCode?: string | null
+  printingRarity?: string | null
+  printingRarityCode?: string | null
+  printingSetName?: string | null
 }
 
 const props = defineProps<{
@@ -55,6 +62,9 @@ const { cardName, cardDesc } = useCardText()
 const frame = computed(() => cardFrame({ type: props.item.cardType }))
 const displayName = computed(() => cardName({ name: props.item.cardName, nameDe: props.item.cardNameDe }))
 const metaId = useId()
+const printingLabel = computed(() => props.item.printingSetCode
+  ? printingShortLabel({ setCode: props.item.printingSetCode, rarity: props.item.printingRarity, rarityCode: props.item.printingRarityCode })
+  : null)
 
 // One flowing line of text: the card's line breaks (some stored as "\r\n",
 // which the HTML parser would turn into "\n" and so break hydration) become
@@ -113,6 +123,20 @@ const excerpt = computed(() => {
             :attribute="item.cardAttribute"
             size="xs"
           />
+          <span
+            v-if="printingLabel"
+            class="inline-flex min-w-0 items-center gap-1 text-[0.6875rem] text-muted"
+            :title="item.printingSetName ?? undefined"
+            data-testid="row-printing"
+          >
+            <UIcon
+              name="i-lucide-layers"
+              class="size-3.5 shrink-0"
+              aria-hidden="true"
+            />
+            <span class="sr-only">{{ t('card.field.printing') }}: </span>
+            <span class="truncate font-mono">{{ printingLabel }}</span>
+          </span>
         </div>
         <p
           v-if="excerpt"

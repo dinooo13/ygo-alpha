@@ -4,6 +4,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CATALOG_FIXTURE_IDS, seedCatalogFixture } from '../../server/db/fixtures/catalog-fixture'
 import * as schema from '../../server/db/schema'
+import { printingKey } from '../../shared/printing'
 import { parseSuggestLimit, parseSuggestRequest, suggestForRequest } from '../../server/utils/card-entry'
 import {
   addOwnedCardsBulk,
@@ -40,6 +41,10 @@ function seed(db: TestDb) {
   seedCatalogFixture(db)
 }
 
+// Dark Magician's printings in the fixture, keyed like the sync (ADR 0034).
+const SDY_006 = printingKey({ cardId: CATALOG_FIXTURE_IDS.darkMagician, setCode: 'SDY-006', rarityCode: 'UR' })
+const LOB_005 = printingKey({ cardId: CATALOG_FIXTURE_IDS.darkMagician, setCode: 'LOB-005', rarityCode: 'UR' })
+
 function item(overrides: Record<string, unknown> = {}) {
   return { catalog_card_id: CATALOG_FIXTURE_IDS.darkMagician, quantity: 1, ...overrides }
 }
@@ -55,20 +60,21 @@ describe('bulk inventory validation', () => {
   it('accepts snake_case and camelCase items and normalizes defaults', () => {
     const inputs = validateInventoryBulkInput(db, 'user-a', {
       items: [
-        item({ printing_id: 'SDY-006' }),
+        item({ printing_id: SDY_006 }),
         { catalogCardId: CATALOG_FIXTURE_IDS.potOfGreed, quantity: 2, collectionId: 'col-a', language: 'de' },
       ],
     })
 
     expect(inputs).toHaveLength(2)
-    // The former collector fields are ignored (ADR 0017).
+    // The printing is read (ADR 0034); language, condition and edition are ignored (ADR 0017).
     expect(inputs[0]).toEqual({
       catalogCardId: CATALOG_FIXTURE_IDS.darkMagician,
       collectionId: null,
+      printingId: SDY_006,
       quantity: 1,
       note: null,
     })
-    expect(inputs[1]).toEqual({ catalogCardId: CATALOG_FIXTURE_IDS.potOfGreed, collectionId: 'col-a', quantity: 2, note: null })
+    expect(inputs[1]).toEqual({ catalogCardId: CATALOG_FIXTURE_IDS.potOfGreed, collectionId: 'col-a', printingId: null, quantity: 2, note: null })
   })
 
   it('rejects a malformed envelope', () => {
@@ -111,11 +117,13 @@ describe('bulk inventory validation', () => {
         items: [
           item(),
           item({ quantity: 0 }),
-          // Unknown collector values are ignored, not rejected (ADR 0017).
-          item({ language: 'xx', printing_id: 'LOB-001' }),
+          // An unknown language is ignored (ADR 0017), a printing of
+          // another card is not (ADR 0034).
+          item({ language: 'xx' }),
           { quantity: 1 },
           item({ catalog_card_id: 999999999 }),
           item({ collection_id: 'nope' }),
+          item({ printing_id: 'LOB-001' }),
         ],
       })
     }
@@ -124,9 +132,10 @@ describe('bulk inventory validation', () => {
     }
 
     expect(thrown?.statusCode).toBe(400)
-    expect(thrown?.data?.errors?.map(entry => entry.index)).toEqual([1, 3, 4, 5])
+    expect(thrown?.data?.errors?.map(entry => entry.index)).toEqual([1, 3, 4, 5, 6])
     expect(thrown?.data?.errors?.[0]?.message).toContain('quantity')
     expect(thrown?.data?.errors?.[2]?.message).toContain('catalog_card_id')
+    expect(thrown?.data?.errors?.[4]).toMatchObject({ index: 6, code: 'printing_not_found' })
   })
 
   it('rejects a collection owned by another user', () => {
@@ -209,22 +218,30 @@ describe('bulk inventory writes', () => {
     expect(rows[0]).toMatchObject({ quantity: 4, note: 'Binder\nFrom the trade' })
   })
 
-  it('keeps collections apart; items that only differed by printing/language merge', async () => {
+  it('keeps collections and printings apart; items that only differed by language merge', async () => {
     const inputs = validateInventoryBulkInput(db, 'user-a', {
       items: [
         item({ quantity: 1 }),
-        item({ quantity: 1, printing_id: 'SDY-006', language: 'de' }),
+        item({ quantity: 1, language: 'de' }),
+        item({ quantity: 1, printing_id: SDY_006 }),
+        item({ quantity: 2, printingId: SDY_006, edition: 'first' }),
+        item({ quantity: 1, printingId: LOB_005 }),
         item({ quantity: 1, collection_id: 'col-a' }),
       ],
     })
 
     const result = await addOwnedCardsBulk(db, 'user-a', inputs)
 
-    expect(result).toMatchObject({ created: 2, merged: 1 })
+    expect(result).toMatchObject({ created: 4, merged: 2 })
     const rows = db.select().from(schema.ownedCard).all()
-    expect(rows).toHaveLength(2)
-    expect(rows.find(row => row.collectionId === null)).toMatchObject({ quantity: 2, printingId: null, language: 'en' })
-    for (const key of ['printingId', 'language', 'condition', 'edition']) {
+    expect(rows).toHaveLength(4)
+    const unassigned = (printingId: string | null) => rows.find(row => row.collectionId === null && row.printingId === printingId)
+    expect(unassigned(null)).toMatchObject({ quantity: 2, language: 'en' })
+    expect(unassigned(SDY_006)).toMatchObject({ quantity: 3, edition: 'unlimited' })
+    expect(unassigned(LOB_005)).toMatchObject({ quantity: 1 })
+    // The answer names each item's stack, with its printing.
+    expect(result.items.map(entry => entry.printingId)).toEqual([null, null, SDY_006, SDY_006, LOB_005, null])
+    for (const key of ['language', 'condition', 'edition']) {
       expect(result.items[0]).not.toHaveProperty(key)
     }
   })

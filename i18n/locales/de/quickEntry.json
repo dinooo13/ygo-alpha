@@ -81,7 +81,11 @@
       "candidateFor": "Treffer für {line}",
       "collectionFor": "Sammlung für {line}",
       "noSuggestions": "Keine Vorschläge — bitte im Katalog suchen.",
-      "catalog": "Katalog"
+      "catalog": "Katalog",
+      "printing": "Printing {setCode}:",
+      "printingFor": "Printing für {line}",
+      "pickRarity": "Seltenheit wählen...",
+      "severalRarities": "{setCode} gibt es in {count} Seltenheiten. Bitte wähle deine aus."
     },
     "justSaved": {
       "title": "Gerade gespeichert",

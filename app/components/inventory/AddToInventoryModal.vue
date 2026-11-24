@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
  * "Karte hinzufügen": adds copies of a picked card (inventory picker,
- * catalog). Adding to a card's existing row merges into it (ADR 0017).
+ * catalog), optionally with their printing (set code + rarity, ADR 0034).
+ * Adding to a card's existing stack (same collection and printing) merges
+ * into it (ADR 0017).
  * Owned copies are edited in the card's detail panel
  * (`InventoryOwnedCardEditor`, #135), not here.
  */
@@ -38,8 +40,11 @@ const noCollectionValue = '__no_collection__'
 const form = reactive({
   quantity: 1,
   collectionId: noCollectionValue,
+  printingId: null as string | null,
   note: '',
 })
+
+const { printings, loading: printingsLoading } = useCardPrintings(() => props.open ? props.card?.id ?? null : null)
 
 const isSubmitting = ref(false)
 const errorMessage = ref('')
@@ -66,6 +71,7 @@ watch(
 
     form.quantity = 1
     form.collectionId = props.presetCollectionId ?? noCollectionValue
+    form.printingId = null
     form.note = ''
     errorMessage.value = ''
   },
@@ -85,6 +91,7 @@ async function save() {
   const payload = {
     catalog_card_id: catalogCardId,
     collection_id: form.collectionId === noCollectionValue ? null : form.collectionId,
+    printing_id: form.printingId,
     quantity: form.quantity,
     note: form.note || null,
   }
@@ -147,6 +154,19 @@ async function save() {
             />
           </UFormField>
         </div>
+
+        <UFormField
+          :label="t('card.field.printing')"
+          :hint="t('common.optional')"
+          :description="t('inventory.printing.hint')"
+        >
+          <InventoryPrintingSelect
+            v-model="form.printingId"
+            :printings="printings"
+            :loading="printingsLoading"
+            :label="t('card.field.printing')"
+          />
+        </UFormField>
 
         <UFormField :label="t('card.field.note')">
           <UTextarea

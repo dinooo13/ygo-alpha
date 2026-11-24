@@ -33,9 +33,10 @@ Examples include:
 - quantity
 - storage location
 - collection or box assignment
+- the printing (set code and rarity), optional
 - a note
 
-The inventory tracks the quantity, the collection or box, and a note; sets and printings live in the catalog (see ADR 0017).
+The inventory tracks the quantity, the collection or box, an optional printing (set code and rarity) and a note (ADR 0034; language, condition and edition stay out, ADR 0017).
 
 The user should be able to search across their complete inventory, regardless of how the cards are split across collections or boxes.
 
@@ -171,6 +172,22 @@ collections are built by moving copies out of it, per deck if wanted
       inventory and the deck builder; "Effekt" includes Flip, Tuner, Spirit,
       Toon, Union and Gemini monsters, the exact "Typ" stays as the finer
       filter.
+
+Tester-Feedback Nov 2026 (#176, [ADR 0034](adr/0034-inventory-printings.md)):
+the inventory stores the printing again, optionally.
+
+- [x] Every printing survives the catalog sync (key: card + set code +
+      rarity; `rarity_code` stored).
+- [x] An optional printing per stack, part of the merge key, in add, edit,
+      bulk add, moves, "Sammlung aus Deck befüllen" and the assistant's
+      `add_to_inventory`.
+- [x] A printing picker in "Karte hinzufügen" and the card's detail panel;
+      quick entry preselects the printing of a set code and asks for the
+      rarity when the code has several; rows and tiles show it; a
+      "Set / Printing" filter.
+- [ ] The image of the printing instead of the card's artwork (needs
+      research: the card data has one image per artwork, not per set).
+- [ ] Prices per printing.
 
 ### Phase 2: Faster Card Entry
 

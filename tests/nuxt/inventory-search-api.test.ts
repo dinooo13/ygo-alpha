@@ -61,6 +61,24 @@ interface CardSeed {
   tcgDate?: string | null
 }
 
+// Printings keyed like the sync keys them (ADR 0034).
+const DM_LOB = '46986414|LOB-005|UR'
+const DM_SDY = '46986414|SDY-006|UR'
+const POG_MRD = '55144522|MRD-001|C'
+
+function seedPrintings(db: TestDb) {
+  db.insert(schema.catalogSet).values([
+    { id: 'lob', name: 'Legend of Blue Eyes White Dragon' },
+    { id: 'sdy', name: 'Starter Deck: Yugi' },
+    { id: 'mrd', name: 'Metal Raiders' },
+  ]).run()
+  db.insert(schema.catalogPrinting).values([
+    { id: DM_LOB, cardId: 46986414, setId: 'lob', setCode: 'LOB-005', rarity: 'Ultra Rare', rarityCode: 'UR' },
+    { id: DM_SDY, cardId: 46986414, setId: 'sdy', setCode: 'SDY-006', rarity: 'Ultra Rare', rarityCode: 'UR' },
+    { id: POG_MRD, cardId: 55144522, setId: 'mrd', setCode: 'MRD-001', rarity: 'Common', rarityCode: 'C' },
+  ]).run()
+}
+
 function seedCards(db: TestDb, cards: CardSeed[]) {
   const now = new Date()
   db.insert(schema.catalogCard).values(cards.map(card => ({
@@ -624,6 +642,27 @@ describe('inventory search facets', () => {
       attributes: ['DARK'],
       races: ['Spellcaster'],
       levels: [7],
+      sets: [],
+      hasUnknownPrinting: true,
+    })
+  })
+
+  it('lists the sets of the owned printings and whether a stack has none (ADR 0034)', async () => {
+    seedCards(db, [
+      { id: 46986414, name: 'Dark Magician', type: 'Normal Monster' },
+      { id: 55144522, name: 'Pot of Greed', type: 'Spell Card' },
+    ])
+    seedPrintings(db)
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: DM_LOB }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: DM_SDY }))
+    await addOwnedCard(db, 'user-b', validateInventoryInput({ catalog_card_id: 55144522, printingId: POG_MRD }))
+
+    expect(loadInventorySearchFacets(db, 'user-a')).toMatchObject({
+      sets: [
+        { id: 'lob', name: 'Legend of Blue Eyes White Dragon' },
+        { id: 'sdy', name: 'Starter Deck: Yugi' },
+      ],
+      hasUnknownPrinting: false,
     })
   })
 
@@ -648,7 +687,45 @@ describe('inventory search facets', () => {
       attributes: [],
       races: [],
       levels: [],
+      sets: [],
+      hasUnknownPrinting: false,
     })
+  })
+})
+
+describe('inventory search set filter (ADR 0034)', () => {
+  let db: TestDb
+
+  beforeEach(async () => {
+    db = createTestDb()
+    seedUsers(db)
+    seedCards(db, [
+      { id: 46986414, name: 'Dark Magician', type: 'Normal Monster' },
+      { id: 55144522, name: 'Pot of Greed', type: 'Spell Card' },
+    ])
+    seedPrintings(db)
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: DM_LOB, quantity: 2 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: DM_SDY, quantity: 1 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, quantity: 4 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 55144522, printingId: POG_MRD, quantity: 1 }))
+  })
+
+  function totals(rawQuery: Record<string, unknown>) {
+    return Object.fromEntries(runInventorySearch(db, 'user-a', rawQuery).items.map(item => [item.name, item.totalQuantity]))
+  }
+
+  it('parses `set` like the other facets', () => {
+    expect(parseInventorySearchQuery({ set: 'lob,__unknown__' }).set).toEqual(['lob', '__unknown__'])
+    expect(parseInventorySearchQuery({}).set).toEqual([])
+  })
+
+  it('counts only the stacks of a printing in the chosen sets', () => {
+    expect(totals({})).toEqual({ 'Dark Magician': 7, 'Pot of Greed': 1 })
+    expect(totals({ set: 'lob' })).toEqual({ 'Dark Magician': 2 })
+    expect(totals({ set: 'lob,mrd' })).toEqual({ 'Dark Magician': 2, 'Pot of Greed': 1 })
+    expect(totals({ set: '__unknown__' })).toEqual({ 'Dark Magician': 4 })
+    expect(totals({ set: 'sdy,__unknown__' })).toEqual({ 'Dark Magician': 5 })
+    expect(totals({ set: 'nope' })).toEqual({})
   })
 })
 

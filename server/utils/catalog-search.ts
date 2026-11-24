@@ -76,6 +76,28 @@ export async function searchCatalog(db: Db, filters: CardListQuery, cardLocale: 
   }
 }
 
+/**
+ * Every printing of a card (ADR 0034: one per set code and rarity), by set
+ * name, set code and rarity. For the card detail and the inventory's
+ * printing picker.
+ */
+export function listCardPrintings(db: Db, cardId: number) {
+  return db
+    .select({
+      id: catalogPrinting.id,
+      setCode: catalogPrinting.setCode,
+      setName: catalogSet.name,
+      rarity: catalogPrinting.rarity,
+      rarityCode: catalogPrinting.rarityCode,
+      price: catalogPrinting.price,
+    })
+    .from(catalogPrinting)
+    .innerJoin(catalogSet, eq(catalogPrinting.setId, catalogSet.id))
+    .where(eq(catalogPrinting.cardId, cardId))
+    .orderBy(asc(catalogSet.name), asc(catalogPrinting.setCode), asc(catalogPrinting.rarity))
+    .all()
+}
+
 export async function getCatalogCardDetail(db: Db, id: number) {
   // A printed passcode YGOPRODeck keeps as an alternate artwork resolves to
   // its card (ADR 0023), so the returned `card.id` can differ from `id`. A
@@ -125,17 +147,7 @@ export async function getCatalogCardDetail(db: Db, id: number) {
   const { retiredAt, ...rest } = row
   const card = { ...rest, retired: retiredAt !== null }
 
-  const printings = await db
-    .select({
-      setCode: catalogPrinting.setCode,
-      setName: catalogSet.name,
-      rarity: catalogPrinting.rarity,
-      price: catalogPrinting.price,
-    })
-    .from(catalogPrinting)
-    .innerJoin(catalogSet, eq(catalogPrinting.setId, catalogSet.id))
-    .where(eq(catalogPrinting.cardId, cardId))
-    .orderBy(asc(catalogSet.name), asc(catalogPrinting.setCode))
+  const printings = listCardPrintings(db, cardId)
 
   const images = await db
     .select({

@@ -4,6 +4,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CATALOG_FIXTURE_IDS, seedCatalogFixture } from '../../server/db/fixtures/catalog-fixture'
 import * as schema from '../../server/db/schema'
+import { printingKey } from '../../shared/printing'
 import {
   INVENTORY_MOVE_MAX_ITEMS,
   addOwnedCard,
@@ -219,6 +220,52 @@ describe('moveOwnedCards', () => {
       [darkMagician, null, 2],
       [potOfGreed, null, 1],
     ])
+  })
+})
+
+describe('moveOwnedCards with printings (ADR 0034)', () => {
+  let db: TestDb
+  const SDY = printingKey({ cardId: darkMagician, setCode: 'SDY-006', rarityCode: 'UR' })
+  const LOB = printingKey({ cardId: darkMagician, setCode: 'LOB-005', rarityCode: 'UR' })
+
+  beforeEach(() => {
+    db = createTestDb()
+    seed(db)
+  })
+
+  function ownPrinting(quantity: number, printingId: string | null, collectionId: string | null = null) {
+    return addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: darkMagician, quantity, collection_id: collectionId, printingId }))
+  }
+
+  function printingStacks() {
+    return db.select().from(schema.ownedCard).all()
+      .map(row => `${row.collectionId ?? '-'}/${row.printingId ?? '?'}=${row.quantity}`)
+      .sort()
+  }
+
+  it('a split keeps the printing and joins the target\'s stack of the same printing only', async () => {
+    const source = await ownPrinting(5, SDY)
+    await ownPrinting(1, SDY, 'box-1')
+    await ownPrinting(2, LOB, 'box-1')
+    await ownPrinting(4, null, 'box-1')
+
+    const result = move(db, 'user-a', [{ ownedCardId: source.id, quantity: 2, toCollectionId: 'box-1' }])
+
+    expect(result.items).toEqual([expect.objectContaining({ printingId: SDY, quantity: 2, remaining: 3 })])
+    expect(printingStacks()).toEqual([`-/${SDY}=3`, 'box-1/?=4', `box-1/${LOB}=2`, `box-1/${SDY}=3`].sort())
+  })
+
+  it('a whole stack moves with its printing and never merges into another printing', async () => {
+    const known = await ownPrinting(2, LOB)
+    const unknown = await ownPrinting(3, null)
+    await ownPrinting(1, null, 'box-2')
+
+    move(db, 'user-a', [
+      { ownedCardId: known.id, toCollectionId: 'box-2' },
+      { ownedCardId: unknown.id, toCollectionId: 'box-2' },
+    ])
+
+    expect(printingStacks()).toEqual(['box-2/?=4', `box-2/${LOB}=2`].sort())
   })
 })
 

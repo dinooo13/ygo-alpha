@@ -9,7 +9,7 @@ mark the old as superseded.
 | # | Title | Status |
 |---|-------|--------|
 | [0001](0001-card-catalog-data-model.md) | Card catalog data model and YGOPRODeck import | Accepted (admin endpoint gate superseded by [0027](0027-invite-code-and-admin-token.md)) |
-| [0002](0002-owned-card-inventory-data-model.md) | Owned-card inventory data model | Accepted (collector parts superseded by [0017](0017-inventory-without-collector-details.md)) |
+| [0002](0002-owned-card-inventory-data-model.md) | Owned-card inventory data model | Accepted (collector parts superseded by [0017](0017-inventory-without-collector-details.md); printing back with [0034](0034-inventory-printings.md)) |
 | [0003](0003-client-side-ocr-and-speech-entry.md) | Client-side OCR and speech entry, server-side matching | Accepted |
 | [0004](0004-deck-data-model.md) | Deck data model | Accepted |
 | [0005](0005-rule-format-model.md) | Rule format model | Accepted |
@@ -24,7 +24,7 @@ mark the old as superseded.
 | [0014](0014-ui-internationalisation.md) | UI internationalisation (German and English) | Accepted |
 | [0015](0015-german-card-data.md) | German card data and card display language | Accepted (implemented: F3a–F3c); UI credit superseded by [0017](0017-inventory-without-collector-details.md) |
 | [0016](0016-visual-design-system.md) | Visual design system and theming (Duel Arena) | Accepted |
-| [0017](0017-inventory-without-collector-details.md) | Inventory without collector details | Accepted |
+| [0017](0017-inventory-without-collector-details.md) | Inventory without collector details | Accepted (printing part superseded by [0034](0034-inventory-printings.md)) |
 | [0018](0018-product-name-ygo-alpha.md) | Product name "YGO Alpha" | Accepted |
 | [0019](0019-retired-catalog-cards.md) | Retired catalog cards | Accepted (extended by [0024](0024-passcode-aliases-and-catalog-cleanup.md)) |
 | [0020](0020-assistant-on-the-ai-sdk.md) | The chat assistant on the Vercel AI SDK | Accepted, implemented (84a–84c); per-turn deck context removed by [0021](0021-no-deck-link-in-assistant-conversations.md); proposals end the turn: [0026](0026-proposal-ends-the-assistant-turn.md) |
@@ -41,3 +41,4 @@ mark the old as superseded.
 | [0031](0031-tournament-league-scoring.md) | Tournament scoring, byes, no draws, league tables and withdrawing | Accepted |
 | [0032](0032-collections-built-by-moving-copies.md) | Collections are built by moving copies out of the inventory | Accepted |
 | [0033](0033-deploy-key-forced-command.md) | The deploy key runs one fixed script | Accepted |
+| [0034](0034-inventory-printings.md) | Printings in the inventory | Accepted (images per printing still open, #176) |

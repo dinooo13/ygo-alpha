@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { useDb } from '../db'
-import { catalogCard, ownedCard } from '../db/schema'
+import { catalogCard, catalogPrinting, catalogSet, ownedCard } from '../db/schema'
 import { cardKindClause, parseCardKinds } from './card-kind-sql'
 import { cardNameMatches, cardTextMatches } from './card-name-search'
 import { primaryImageUrlSql } from './card-image-sql'
@@ -9,6 +9,7 @@ import { cardNameDeSql } from './card-translation-sql'
 import { parseQueryFlag } from './query-flag'
 import { UNASSIGNED_COLLECTION_ID } from '../../shared/inventory'
 import type { CardKind } from '../../shared/card-kind'
+import { UNKNOWN_PRINTING_FILTER } from '../../shared/printing'
 
 export { UNASSIGNED_COLLECTION_ID }
 
@@ -31,6 +32,10 @@ export interface InventorySearchFilters {
   attribute: string[]
   race: string[]
   level: number[]
+  // Set ids (`catalog_set.id`) and/or `UNKNOWN_PRINTING_FILTER` (ADR 0034):
+  // only the stacks whose printing is in one of these sets, or that have no
+  // printing. A row filter, so the quantities count those stacks only.
+  set: string[]
   // A collection id owned by the caller, or `UNASSIGNED_COLLECTION_ID`.
   collectionId?: string
   // With a real `collectionId`: only that collection's copies count, in the
@@ -104,7 +109,8 @@ function clampInt(value: number, min: number, max: number): number {
 /**
  * Coerces raw query params (as returned by h3's `getQuery`) into a typed,
  * clamped filter set. Never throws — unknown params (including the former
- * `setId`/`language`/`condition`/`edition` filters, ADR 0017) are ignored and
+ * `setId`/`language`/`condition`/`edition` filters, ADR 0017; the set filter
+ * is `set` since ADR 0034) are ignored and
  * invalid paging falls back to defaults, matching the project's hand-rolled
  * (no Zod) validation style.
  */
@@ -119,6 +125,7 @@ export function parseInventorySearchQuery(rawQuery: Record<string, unknown>): In
     attribute: toStringArray(rawQuery.attribute),
     race: toStringArray(rawQuery.race),
     level: toIntArray(rawQuery.level),
+    set: toStringArray(rawQuery.set),
     collectionId: toTrimmedString(rawQuery.collectionId),
     scoped: parseQueryFlag(rawQuery.scoped),
     sort: toSort(rawQuery.sort),
@@ -170,6 +177,29 @@ export function inventoryCardFilterClauses(filters: InventoryCardFilters): SQL[]
 }
 
 /**
+ * The set filter (ADR 0034) as a row clause on `owned_card`: the stacks whose
+ * printing is in one of `sets`, plus, with `UNKNOWN_PRINTING_FILTER`, the
+ * stacks without a printing. `undefined` without a filter. No join needed:
+ * the printing's set is looked up in a subquery.
+ */
+export function printingSetFilterClause(sets: string[]): SQL | undefined {
+  if (sets.length === 0) {
+    return undefined
+  }
+  const setIds = sets.filter(set => set !== UNKNOWN_PRINTING_FILTER)
+  const clauses: SQL[] = []
+  if (setIds.length > 0) {
+    clauses.push(sql`${ownedCard.printingId} IN (
+      SELECT ${catalogPrinting.id} FROM ${catalogPrinting} WHERE ${inArray(catalogPrinting.setId, setIds)}
+    )`)
+  }
+  if (setIds.length < sets.length) {
+    clauses.push(isNull(ownedCard.printingId) as SQL)
+  }
+  return clauses.length === 1 ? clauses[0] : (or(...clauses) as SQL)
+}
+
+/**
  * Builds the Drizzle WHERE condition for the aggregated inventory search,
  * scoped to `userId`. Pure and HTTP-free so it can be unit tested directly.
  *
@@ -183,6 +213,11 @@ export function inventoryCardFilterClauses(filters: InventoryCardFilters): SQL[]
  */
 export function buildInventorySearchWhere(userId: string, filters: InventorySearchFilters): SQL {
   const clauses: SQL[] = [eq(ownedCard.userId, userId), ...inventoryCardFilterClauses(filters)]
+
+  const setClause = printingSetFilterClause(filters.set)
+  if (setClause) {
+    clauses.push(setClause)
+  }
 
   if (filters.collectionId) {
     clauses.push(
@@ -207,6 +242,10 @@ export interface InventorySearchFacets {
   attributes: string[]
   races: string[]
   levels: number[]
+  /** The sets of the printings the user owns (ADR 0034), by name. */
+  sets: Array<{ id: string, name: string }>
+  /** Whether some stack has no printing, for the "printing unknown" option. */
+  hasUnknownPrinting: boolean
 }
 
 function isNonEmptyString(value: string | null | undefined): value is string {
@@ -219,8 +258,8 @@ function uniqueSortedStrings(values: Array<string | null | undefined>): string[]
 
 /**
  * The filter options of the inventory search: the distinct catalog values
- * over every card the user owns. Only catalog properties — the inventory has
- * no set, language, condition or edition filters (ADR 0017).
+ * over every card the user owns, and the sets of the owned printings
+ * (ADR 0034). No language, condition or edition filters (ADR 0017).
  */
 export function loadInventorySearchFacets(db: Db, userId: string): InventorySearchFacets {
   const rows = db
@@ -235,6 +274,21 @@ export function loadInventorySearchFacets(db: Db, userId: string): InventorySear
     .where(eq(ownedCard.userId, userId))
     .all()
 
+  const sets = db
+    .selectDistinct({ id: catalogSet.id, name: catalogSet.name })
+    .from(ownedCard)
+    .innerJoin(catalogPrinting, eq(ownedCard.printingId, catalogPrinting.id))
+    .innerJoin(catalogSet, eq(catalogPrinting.setId, catalogSet.id))
+    .where(eq(ownedCard.userId, userId))
+    .all()
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const hasUnknownPrinting = db
+    .select({ id: ownedCard.id })
+    .from(ownedCard)
+    .where(and(eq(ownedCard.userId, userId), isNull(ownedCard.printingId)))
+    .limit(1)
+    .get() !== undefined
+
   const levels = Array.from(
     new Set(rows.map(row => row.level).filter((level): level is number => level !== null)),
   ).sort((a, b) => a - b)
@@ -247,6 +301,8 @@ export function loadInventorySearchFacets(db: Db, userId: string): InventorySear
     // #17), matching `getCatalogFacets` in server/utils/catalog-search.ts.
     races: uniqueSortedStrings(rows.filter(row => row.type !== 'Skill Card').map(row => row.race)),
     levels,
+    sets,
+    hasUnknownPrinting,
   }
 }
 

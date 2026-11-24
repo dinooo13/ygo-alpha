@@ -6,7 +6,9 @@ Accepted
 
 Partly superseded by [0017](0017-inventory-without-collector-details.md): the
 owned-card grain no longer includes printing, language, condition or edition;
-those columns stay but are unused.
+those columns stay but are unused. [0034](0034-inventory-printings.md) brings
+the printing back: the grain is `(user_id, catalog_card_id, collection_id,
+printing_id)`, with `printing_id` optional.
 
 ## Context
 

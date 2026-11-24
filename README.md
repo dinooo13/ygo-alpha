@@ -35,7 +35,9 @@ every deck as you build it. The assistant plans with the cards in your binder, n
 
 - **One inventory, split into collections the way you store your cards:** binders, boxes, a trade pile.
   Search all of them at once or one at a time.
-- **Filter by type, attribute, monster type and level**, and search card text as well as names.
+- **Record the printing if you care:** set code and rarity per stack, optional. Quick entry picks it up
+  from the set code you type.
+- **Filter by type, attribute, monster type, level and set**, and search card text as well as names.
 - **English and German.** Search finds a card by either name, and cards show the official German names and
   texts if you prefer them.
 
@@ -45,7 +47,8 @@ every deck as you build it. The assistant plans with the cards in your binder, n
 
 Paste or type a list, one card per line: `3x Dark Magician`, `Pot of Greed x2`, `Blue-Eyes White Dragon (SDK-001)`,
 or the 8-digit passcode from the card. Quick entry matches each line to the catalog, shows how sure the match
-is, catches typos, and saves nothing until you've checked the list. To add a card from a photo, send the photo
+is, catches typos, and saves nothing until you've checked the list. A set code also keeps the printing; when
+the code comes in several rarities, quick entry asks which one you have. To add a card from a photo, send the photo
 to the assistant.
 
 ### Every card, one search away

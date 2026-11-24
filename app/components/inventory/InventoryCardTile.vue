@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { breakdownKey, breakdownLabel } from '~/utils/inventory-search-result'
 import { cardFrame } from '~~/shared/card-frame'
+import { printingShortLabel } from '~~/shared/printing'
 import type { InventorySearchResultItem } from '~/utils/inventory-search-result'
 
 const props = defineProps<{
@@ -17,6 +18,11 @@ const { t, n } = useI18n()
 const { cardName, cardValue } = useCardText()
 
 const frame = computed(() => cardFrame(props.item))
+
+// The known printings (ADR 0034) as one line: "LOB-001 (UR) ×2 · SDY-006 (UR) ×1".
+const printingLine = computed(() => (props.item.printingBreakdown ?? [])
+  .map(entry => t('inventory.breakdown.entry', { name: printingShortLabel(entry), count: n(entry.quantity, 'integer') }))
+  .join(' · '))
 </script>
 
 <template>
@@ -70,6 +76,15 @@ const frame = computed(() => cardFrame(props.item))
           class="min-w-0 truncate text-[0.6875rem] text-muted"
         >{{ cardValue('race', item.race) }}</span>
       </div>
+
+      <p
+        v-if="printingLine"
+        class="line-clamp-2 font-mono text-[0.6875rem] leading-4 text-muted"
+        :title="printingLine"
+        data-testid="tile-printings"
+      >
+        <span class="sr-only">{{ t('inventory.printing.label') }}: </span>{{ printingLine }}
+      </p>
 
       <p class="font-numeric text-sm font-semibold tracking-[0.04em] text-highlighted tabular-nums">
         {{ t('card.totalQuantity', { count: n(item.totalQuantity, 'integer') }) }}

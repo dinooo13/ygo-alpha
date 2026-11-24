@@ -1,26 +1,45 @@
 <script setup lang="ts">
 /**
- * "Im Inventar": the user's copies of one card, one row per collection
- * (ADR 0017), edited in place. The inventory's section of the card detail
+ * "Im Inventar": the user's copies of one card, one row per collection and
+ * printing (ADR 0017, ADR 0034), edited in place. The inventory's section of the card detail
  * overlay (`CardDetailModal`, #88/#135), the same from "Galerie" and "Liste".
  *
  * - Per row: the collection (a select; picking one that already holds the
- *   card merges the copies into it), the quantity (− / input / +; 0 asks to
- *   remove the row), a remove button and the note (explicit save).
+ *   card in the same printing merges the copies into it), the quantity
+ *   (− / input / +; 0 asks to remove the row), a remove button, the printing
+ *   (set code + rarity, or "Printing unbekannt"; picking one the collection
+ *   already holds merges too) and the note (explicit save).
  * - "Zu Sammlung hinzufügen" adds one copy to a collection the card isn't in
  *   yet; it stays when the last row is gone, so the card can come back.
  * - The rows come from `GET /api/inventory?catalogCardId=`. They are sorted
- *   here (no collection first, then by name) so they don't jump around after
- *   an edit; the API orders by `updatedAt`.
+ *   here (no collection first, then by name, then by printing) so they don't
+ *   jump around after an edit; the API orders by `updatedAt`.
  * - Every change is saved at once and optimistically. All writes run one
  *   after another through one queue, so a quick "+ + +" sends 2, 3, 4 in
  *   order and the last value wins. A failed write shows the translated error
  *   and reloads the rows. Controls stay enabled while a write is in flight:
  *   disabling a focused button would drop keyboard focus to the page.
  */
+import { printingShortLabel } from '~~/shared/printing'
+
 interface OwnedRow {
   id: string
   collectionId: string | null
+  /** `null` = printing unknown (ADR 0034). */
+  printingId: string | null
+  /** "LOB-001 (UR)"; `null` without a printing. */
+  printingLabel: string | null
+  quantity: number
+  note: string | null
+}
+
+interface OwnedRowResponse {
+  id: string
+  collectionId: string | null
+  printingId?: string | null
+  printingSetCode?: string | null
+  printingRarity?: string | null
+  printingRarityCode?: string | null
   quantity: number
   note: string | null
 }
@@ -72,8 +91,35 @@ function collectionName(collectionId: string | null): string {
   return props.collections.find(c => c.id === collectionId)?.name ?? t('inventory.breakdown.unnamedCollection')
 }
 
+// The row in the controls' labels: its collection and, when known, its
+// printing, so two printings in one collection stay apart.
 function collectionLabel(row: OwnedRow): string {
-  return collectionName(row.collectionId)
+  const name = collectionName(row.collectionId)
+  return row.printingLabel ? `${name} · ${row.printingLabel}` : name
+}
+
+const { printings, loading: printingsLoading } = useCardPrintings(() => props.catalogCardId)
+
+function printingLabelOf(printingId: string | null): string | null {
+  if (printingId === null) {
+    return null
+  }
+  const printing = printings.value.find(entry => entry.id === printingId)
+  return printing ? printingShortLabel(printing) : null
+}
+
+function toOwnedRow(item: OwnedRowResponse): OwnedRow {
+  const printingId = item.printingId ?? null
+  return {
+    id: item.id,
+    collectionId: item.collectionId,
+    printingId,
+    printingLabel: item.printingSetCode
+      ? printingShortLabel({ setCode: item.printingSetCode, rarity: item.printingRarity, rarityCode: item.printingRarityCode })
+      : printingLabelOf(printingId),
+    quantity: item.quantity,
+    note: item.note,
+  }
 }
 
 const collectionItems = computed(() => [
@@ -94,13 +140,22 @@ const addItems = computed(() => {
   }))
 })
 
+function compareCollections(a: string | null, b: string | null): number {
+  if (a === b) {
+    return 0
+  }
+  if (a === null || b === null) {
+    return a === null ? -1 : 1
+  }
+  return collectionName(a).localeCompare(collectionName(b)) || a.localeCompare(b)
+}
+
 function sortRows(list: OwnedRow[]): OwnedRow[] {
-  return [...list].sort((a, b) => {
-    if (a.collectionId === null || b.collectionId === null) {
-      return a.collectionId === b.collectionId ? 0 : a.collectionId === null ? -1 : 1
-    }
-    return collectionLabel(a).localeCompare(collectionLabel(b))
-  })
+  // No collection first, then by collection name; within a collection
+  // "printing unknown" first, then by printing.
+  return [...list].sort((a, b) =>
+    compareCollections(a.collectionId, b.collectionId)
+    || (a.printingLabel ?? '').localeCompare(b.printingLabel ?? ''))
 }
 
 let latest = 0
@@ -111,13 +166,13 @@ async function loadRows() {
   }
   const request = ++latest
   try {
-    const { items } = await $fetch<{ items: OwnedRow[] }>('/api/inventory', {
+    const { items } = await $fetch<{ items: OwnedRowResponse[] }>('/api/inventory', {
       query: { catalogCardId: props.catalogCardId, pageSize: 100 },
     })
     if (request !== latest) {
       return
     }
-    rows.value = sortRows(items.map(({ id, collectionId, quantity, note }) => ({ id, collectionId, quantity, note })))
+    rows.value = sortRows(items.map(toOwnedRow))
     loadState.value = 'ready'
   }
   catch {
@@ -131,9 +186,11 @@ function rowElement(id: string): HTMLElement | undefined {
   return [...(root.value?.querySelectorAll<HTMLElement>('[data-row-id]') ?? [])].find(el => el.dataset.rowId === id)
 }
 
-async function focusRowControl(id: string, control: 'collection' | 'note' = 'collection') {
+async function focusRowControl(id: string, control: 'collection' | 'printing' | 'note' = 'collection') {
   await nextTick()
-  const selector = control === 'collection' ? '[data-collection-select]' : '[data-note-button]'
+  const selector = control === 'collection'
+    ? '[data-collection-select]'
+    : control === 'printing' ? '[data-printing-select] button, [data-printing-select] input' : '[data-note-button]'
   rowElement(id)?.querySelector<HTMLElement>(selector)?.focus()
 }
 
@@ -202,6 +259,24 @@ function moveRow(row: OwnedRow, value: string) {
     }
     await loadRows()
     await focusRowControl(saved.id)
+  })
+}
+
+function setPrinting(row: OwnedRow, printingId: string | null) {
+  if (printingId === row.printingId) {
+    return
+  }
+  const { id } = row
+  const target = collectionName(row.collectionId)
+  row.printingId = printingId
+  row.printingLabel = printingLabelOf(printingId)
+  enqueue(async () => {
+    const saved = await $fetch<{ id: string }>(`/api/inventory/${id}`, { method: 'PATCH', body: { printingId } })
+    if (saved.id !== id) {
+      toast.add({ title: t('inventory.editor.merged', { collection: target }), color: 'success', icon: 'i-lucide-merge' })
+    }
+    await loadRows()
+    await focusRowControl(saved.id, 'printing')
   })
 }
 
@@ -399,6 +474,20 @@ function retry() {
                 @click="requestRemove(row)"
               />
             </div>
+          </div>
+
+          <div
+            data-printing-select
+            class="mt-2"
+          >
+            <InventoryPrintingSelect
+              :model-value="row.printingId"
+              :printings="printings"
+              :loading="printingsLoading"
+              :label="t('inventory.editor.printing', { collection: collectionLabel(row) })"
+              size="sm"
+              @update:model-value="(value: string | null) => setPrinting(row, value)"
+            />
           </div>
 
           <form

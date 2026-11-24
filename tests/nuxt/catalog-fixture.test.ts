@@ -48,7 +48,7 @@ describe('catalog fixture', () => {
       .from(schema.catalogPrinting)
       .innerJoin(schema.catalogCard, eq(schema.catalogPrinting.cardId, schema.catalogCard.id))
       .innerJoin(schema.catalogSet, eq(schema.catalogPrinting.setId, schema.catalogSet.id))
-      .where(eq(schema.catalogPrinting.id, 'LOB-005'))
+      .where(eq(schema.catalogPrinting.id, `${CATALOG_FIXTURE_IDS.darkMagician}|LOB-005|UR`))
       .all()
 
     expect(rows).toEqual([

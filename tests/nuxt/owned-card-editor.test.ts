@@ -15,7 +15,17 @@ interface Row {
   collectionId: string | null
   quantity: number
   note: string | null
+  printingId?: string | null
 }
+
+// The card's printings (`GET /api/catalog/cards/:id/printings`, ADR 0034).
+const LOB = `${46986414}|LOB-005|UR`
+const SDY = `${46986414}|SDY-006|UR`
+const printings = [
+  { id: LOB, setCode: 'LOB-005', setName: 'Legend of Blue Eyes White Dragon', rarity: 'Ultra Rare', rarityCode: 'UR' },
+  { id: SDY, setCode: 'SDY-006', setName: 'Starter Deck: Yugi', rarity: 'Ultra Rare', rarityCode: 'UR' },
+]
+const printingFor = (id: string | null | undefined) => printings.find(printing => printing.id === id)
 
 interface Call {
   url: string
@@ -42,8 +52,21 @@ function fakeServer(initial: Row[]) {
 
   const fetch = vi.fn(async (url: string, options: { method?: string, body?: Record<string, unknown>, query?: unknown } = {}) => {
     const method = options.method ?? 'GET'
+    if (method === 'GET' && url.endsWith('/printings')) {
+      return { items: printings }
+    }
     if (method === 'GET') {
-      return { items: rows.map(row => ({ ...row, catalogCardId: CARD_ID })), total: rows.length }
+      return {
+        items: rows.map(row => ({
+          ...row,
+          catalogCardId: CARD_ID,
+          printingId: row.printingId ?? null,
+          printingSetCode: printingFor(row.printingId)?.setCode ?? null,
+          printingRarity: printingFor(row.printingId)?.rarity ?? null,
+          printingRarityCode: printingFor(row.printingId)?.rarityCode ?? null,
+        })),
+        total: rows.length,
+      }
     }
     calls.push({ url, method, body: options.body })
     if (state.hold) {
@@ -332,7 +355,7 @@ describe('InventoryOwnedCardEditor', () => {
   it('shows the translated error and reloads when a write fails', async () => {
     const { component, server } = await mountEditor(threeRows)
     server.state.fail = { data: { statusCode: 400, data: { code: 'quantity_too_large', params: { max: 999 } } } }
-    const loads = () => server.fetch.mock.calls.filter(([, options]) => !options?.method).length
+    const loads = () => server.fetch.mock.calls.filter(([url, options]) => !options?.method && url === '/api/inventory').length
 
     expect(loads()).toBe(1)
     await typeQuantity('Anzahl in Binder', '7')
@@ -350,7 +373,9 @@ describe('InventoryOwnedCardEditor', () => {
     const { server, afterWrite } = await mountEditor(threeRows)
     server.state.hold = true
     server.state.fail = new Error('offline')
-    const requests = () => server.fetch.mock.calls.map(([url, options]) => `${options?.method ?? 'GET'} ${url}`)
+    const requests = () => server.fetch.mock.calls
+      .filter(([url]) => !url.endsWith('/printings'))
+      .map(([url, options]) => `${options?.method ?? 'GET'} ${url}`)
 
     await typeQuantity('Anzahl in Binder', '7')
     await typeQuantity('Anzahl in Box 1', '4')
@@ -389,5 +414,53 @@ describe('InventoryOwnedCardEditor', () => {
     expect(component.find('[aria-label="Remove from Box 1"]').exists()).toBe(true)
     expect(component.find('[aria-label="Change collection (now: Binder)"]').exists()).toBe(true)
     expect(text).not.toMatch(/Sammlung|Notiz|Kopie/)
+  })
+
+  describe('printings (ADR 0034)', () => {
+    // Found by name, the component loses its prop types; narrowed to what the tests use.
+    interface PrintingSelectWrapper {
+      props: (key: string) => unknown
+      vm: { $emit: (event: string, ...args: unknown[]) => void }
+    }
+
+    function printingSelects(component: VueWrapper): PrintingSelectWrapper[] {
+      return component.findAllComponents({ name: 'InventoryPrintingSelect' }) as unknown as PrintingSelectWrapper[]
+    }
+
+    it('shows each stack\'s printing, "unknown" ones first, and names it in the labels', async () => {
+      const { component } = await mountEditor([
+        { id: 'r-sdy', collectionId: 'col-1', quantity: 1, note: null, printingId: SDY },
+        { id: 'r-unknown', collectionId: 'col-1', quantity: 2, note: null },
+        { id: 'r-lob', collectionId: 'col-1', quantity: 1, note: null, printingId: LOB },
+      ])
+
+      expect(rowIds(component)).toEqual(['r-unknown', 'r-lob', 'r-sdy'])
+      expect(printingSelects(component).map(select => select.props('modelValue'))).toEqual([null, LOB, SDY])
+      expect(printingSelects(component)[0]!.props('printings')).toEqual(printings)
+      // Two stacks in one collection stay apart in the controls' names.
+      button('Anzahl in Box 1 · LOB-005 (UR)')
+      button('Printing ändern (Box 1 · SDY-006 (UR))')
+      button('Printing ändern (Box 1)')
+    })
+
+    it('saves a picked printing at once and reports a merge into an existing stack', async () => {
+      const { component, server, afterWrite } = await mountEditor([
+        { id: 'r-unknown', collectionId: null, quantity: 2, note: null },
+        { id: 'r-lob', collectionId: null, quantity: 1, note: null, printingId: LOB },
+      ])
+
+      await printingSelects(component)[0]!.vm.$emit('update:modelValue', SDY)
+      await flushPromises()
+      expect(server.calls).toEqual([{ url: '/api/inventory/r-unknown', method: 'PATCH', body: { printingId: SDY } }])
+      expect(afterWrite).toHaveBeenCalledTimes(1)
+
+      // Back to "unknown" … and then into the LOB-005 stack, which merges.
+      server.state.mergeInto = 'r-lob'
+      await printingSelects(component).find(select => select.props('modelValue') === SDY)!.vm.$emit('update:modelValue', LOB)
+      await flushPromises()
+      expect(server.calls.at(-1)).toEqual({ url: '/api/inventory/r-unknown', method: 'PATCH', body: { printingId: LOB } })
+      expect(body().text()).toContain('Mit den Kopien in (keine Sammlung) zusammengelegt.')
+      expect(rowIds(component)).toEqual(['r-lob'])
+    })
   })
 })

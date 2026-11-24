@@ -162,14 +162,15 @@ export const catalogSet = sqliteTable('catalog_set', {
   name: text('name').notNull().unique(),
 })
 
-// A printing is a specific card-in-set appearance (YGOPRODeck `card_sets[]`
-// entry): the join between a card and a set, carrying printing-specific
-// data. Owned cards will later reference a printing for edition/rarity.
+// A printing is one card in one set with one rarity (YGOPRODeck `card_sets[]`
+// entry, ADR 0034): the join between a card and a set, carrying
+// printing-specific data. Owned cards can reference one (`printing_id`).
 export const catalogPrinting = sqliteTable(
   'catalog_printing',
   {
-    // The full per-printing set code (e.g. "SDY-006") is unique across the
-    // API and serves as the natural primary key.
+    // `<card id>|<set code>|<rarity code, else rarity name>` (`printingKey`
+    // in shared/printing.ts). The set code alone is not unique: it repeats
+    // across rarities and, in a few YGOPRODeck entries, across cards.
     id: text('id').primaryKey(),
     cardId: integer('card_id')
       .notNull()
@@ -179,6 +180,9 @@ export const catalogPrinting = sqliteTable(
       .references(() => catalogSet.id, { onDelete: 'cascade' }),
     setCode: text('set_code').notNull(),
     rarity: text('rarity'),
+    // YGOPRODeck `set_rarity_code` without the parentheses ("UR"); NULL when
+    // it has none, and for rows from before migration 0019 until the next sync.
+    rarityCode: text('rarity_code'),
     price: text('price'),
   },
   table => [
@@ -266,8 +270,9 @@ export const ownedCard = sqliteTable(
     catalogCardId: integer('catalog_card_id')
       .notNull()
       .references(() => catalogCard.id, { onDelete: 'cascade' }),
-    // Unused since ADR 0017: always NULL. Kept because dropping an FK column
-    // would need a table rebuild.
+    // The printing (set code + rarity) of these copies, or NULL = "printing
+    // unknown" (ADR 0034; unused between ADR 0017 and ADR 0034). Part of the
+    // stack's identity: (user, card, collection, printing).
     printingId: text('printing_id')
       .references(() => catalogPrinting.id, { onDelete: 'set null' }),
     // Owning storage location, or NULL = unassigned (not in any collection).
@@ -288,6 +293,7 @@ export const ownedCard = sqliteTable(
     index('idx_owned_card_user').on(table.userId),
     index('idx_owned_card_user_card').on(table.userId, table.catalogCardId),
     index('idx_owned_card_collection').on(table.collectionId),
+    index('idx_owned_card_printing').on(table.printingId),
   ],
 )
 

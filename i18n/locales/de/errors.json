@@ -74,7 +74,8 @@
       "assistant_model_not_allowed": "Dieses Modell steht nicht zur Auswahl.",
       "assistant_model_unavailable": "Das gewählte KI-Modell ist beim Anbieter nicht freigeschaltet oder nicht verfügbar. Wähle ein anderes Modell oder prüfe die Einrichtung beim Anbieter.",
       "move_same_collection": "Diese Karten sind schon in dieser Sammlung.",
-      "move_quantity_exceeds": "So viele Kopien gibt es nicht mehr (höchstens {max})."
+      "move_quantity_exceeds": "So viele Kopien gibt es nicht mehr (höchstens {max}).",
+      "printing_not_found": "Dieses Printing gehört nicht zu der Karte."
     }
   }
 }

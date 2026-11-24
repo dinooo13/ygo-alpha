@@ -14,6 +14,19 @@ export interface EntryCandidate {
   imageSmall: string | null
   score: number
   matchedBy: EntryMatchedBy
+  /**
+   * With a set code in the line: this card's printings under that code
+   * (ADR 0034), one per rarity.
+   */
+  printings?: EntryPrinting[]
+}
+
+export interface EntryPrinting {
+  id: string
+  setCode: string
+  setName: string
+  rarity: string | null
+  rarityCode: string | null
 }
 
 export interface ParsedEntryLine {
@@ -34,8 +47,14 @@ export interface EntryRow {
   raw: string
   query: string
   quantity: number
-  /** A parsed set code only identifies the card; no printing is stored (ADR 0017). */
+  /** The parsed set code; it finds the card and its printing (ADR 0034). */
   setCode: string | null
+  /**
+   * The printing saved with the copies, `null` = printing unknown. Preselected
+   * when the set code has a single rarity for the selected card; with
+   * several, the row asks for the rarity (`needsRarity`).
+   */
+  printingId: string | null
   candidates: EntryCandidate[]
   selectedCardId: number | null
   /** Set code and name pointed at different cards — never auto-selected. */
@@ -57,6 +76,8 @@ export interface EntryBulkEntry {
 export interface EntryBulkItem {
   catalogCardId: number
   collectionId: string | null
+  /** Only sent with a printing (ADR 0034). */
+  printingId?: string
   quantity: number
 }
 
@@ -109,6 +130,25 @@ export function hasMatchConflict(candidates: EntryCandidate[]): boolean {
  * matches — stays unresolved on purpose so the user has to confirm it
  * before anything is written.
  */
+/**
+ * The printing a row starts with for its selected card: the only printing
+ * under the parsed set code, else none (several rarities: the user picks).
+ */
+export function defaultPrintingId(candidate: EntryCandidate | undefined): string | null {
+  const printings = candidate?.printings ?? []
+  return printings.length === 1 ? printings[0]!.id : null
+}
+
+/** The selected card's printings under the parsed set code (ADR 0034). */
+export function rowPrintings(row: EntryRow): EntryPrinting[] {
+  return selectedCandidate(row)?.printings ?? []
+}
+
+/** The set code has several rarities for the selected card and none is picked yet. */
+export function needsRarity(row: EntryRow): boolean {
+  return row.printingId === null && rowPrintings(row).length > 1
+}
+
 export function createEntryRow(result: EntrySuggestResult): EntryRow {
   const best = result.candidates[0]
   const setCode = result.input.setCode ?? null
@@ -122,6 +162,7 @@ export function createEntryRow(result: EntrySuggestResult): EntryRow {
     query: result.input.query,
     quantity: result.input.quantity,
     setCode,
+    printingId: defaultPrintingId(preselected),
     candidates: result.candidates,
     selectedCardId: preselected?.cardId ?? null,
     collectionId: null,
@@ -193,6 +234,7 @@ export function buildBulkEntries(rows: EntryRow[], defaults: EntryDefaults): Ent
     item: {
       catalogCardId: row.selectedCardId!,
       collectionId: effectiveCollectionId(row, defaults),
+      ...(row.printingId ? { printingId: row.printingId } : {}),
       quantity: row.quantity,
     },
   }))

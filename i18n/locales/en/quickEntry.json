@@ -81,7 +81,11 @@
       "candidateFor": "Match for {line}",
       "collectionFor": "Collection for {line}",
       "noSuggestions": "No suggestions — please search the catalog.",
-      "catalog": "Catalog"
+      "catalog": "Catalog",
+      "printing": "Printing {setCode}:",
+      "printingFor": "Printing for {line}",
+      "pickRarity": "Pick a rarity...",
+      "severalRarities": "{setCode} comes in {count} rarities. Please pick yours."
     },
     "justSaved": {
       "title": "Just saved",

@@ -30,9 +30,12 @@ export interface CatalogCardDetail {
     replacedById: number | null
   }
   printings: Array<{
+    /** `catalog_printing.id` (ADR 0034); older fixtures may lack it. */
+    id?: string
     setCode: string
     setName: string
     rarity: string | null
+    rarityCode?: string | null
     price: string | null
   }>
   images: Array<{

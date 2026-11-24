@@ -8,6 +8,7 @@ import type { CardDetailPreview } from '~/utils/card-detail'
 import type { InventorySearchResultItem } from '~/utils/inventory-search-result'
 import { isPreviousHistoryEntry } from '~/utils/history-entry'
 import { csvQueryValue, queryList } from '~/utils/query-list'
+import { printingShortLabel } from '~~/shared/printing'
 
 interface InventoryItem {
   id: string
@@ -23,6 +24,12 @@ interface InventoryItem {
   cardTextExcerptDe?: string | null
   cardRetired?: boolean
   imageUrlSmall: string | null
+  /** The stack's printing (ADR 0034); `null` = printing unknown. */
+  printingId?: string | null
+  printingSetCode?: string | null
+  printingRarity?: string | null
+  printingRarityCode?: string | null
+  printingSetName?: string | null
 }
 
 interface CatalogCard {
@@ -53,6 +60,8 @@ interface SearchFacets {
   attributes: string[]
   races: string[]
   levels: number[]
+  sets: Array<{ id: string, name: string }>
+  hasUnknownPrinting: boolean
 }
 
 function emptyFacets(): SearchFacets {
@@ -61,6 +70,8 @@ function emptyFacets(): SearchFacets {
     attributes: [],
     races: [],
     levels: [],
+    sets: [],
+    hasUnknownPrinting: false,
   }
 }
 
@@ -93,7 +104,8 @@ const selectedCard = ref<CatalogCard | null>(null)
 //   on load.
 // - The search (#148): `?q=` (the debounced text), `?inText=1` ("Auch im
 //   Kartentext suchen", kept even without a text, as in the catalog),
-//   `?kind=` / `type` / `attribute` / `race` / `level` (comma lists) and `?sort=`
+//   `?kind=` / `type` / `attribute` / `race` / `level` / `set` (comma lists;
+//   `set` holds set ids and `__unknown__`, ADR 0034) and `?sort=`
 //   (Galerie; `name` is not written).
 // - `?page=` — the shown view's page (#148); each view keeps its own counter,
 //   the other one starts at 1 on a reload. Any filter or scope change goes
@@ -175,6 +187,7 @@ const filters = ref<SearchFilters>({
   attribute: queryList(route.query.attribute),
   race: queryList(route.query.race),
   level: queryList(route.query.level).map(Number).filter(Number.isInteger),
+  set: queryList(route.query.set),
   sort: querySort(route.query.sort),
   page: mode.value === 'gallery' ? initialPage : 1,
 })
@@ -203,6 +216,7 @@ const listQuery = computed(() => ({
   attribute: filters.value.attribute.length ? filters.value.attribute.join(',') : undefined,
   race: filters.value.race.length ? filters.value.race.join(',') : undefined,
   level: filters.value.level.length ? filters.value.level.join(',') : undefined,
+  set: filters.value.set.length ? filters.value.set.join(',') : undefined,
   page: page.value,
   pageSize,
   collectionId: collectionId.value || undefined,
@@ -290,6 +304,7 @@ watch(
     filters.value.attribute,
     filters.value.race,
     filters.value.level,
+    filters.value.set,
     filters.value.sort,
   ],
   () => {
@@ -311,6 +326,7 @@ watch(
     filters.value.attribute,
     filters.value.race,
     filters.value.level,
+    filters.value.set,
     filters.value.sort,
     mode.value,
     page.value,
@@ -326,6 +342,7 @@ watch(
       attribute: csvQueryValue(filters.value.attribute),
       race: csvQueryValue(filters.value.race),
       level: csvQueryValue(filters.value.level),
+      set: csvQueryValue(filters.value.set),
       sort: filters.value.sort === 'name' ? undefined : filters.value.sort,
       page: shownPage > 1 ? String(shownPage) : undefined,
     })
@@ -339,7 +356,8 @@ const hasActiveFacets = computed(() => Boolean(
   || filters.value.type.length
   || filters.value.attribute.length
   || filters.value.race.length
-  || filters.value.level.length,
+  || filters.value.level.length
+  || filters.value.set.length,
 ))
 
 // Search text or facets (not the collection, which is the page's scope).
@@ -362,6 +380,7 @@ const searchQuery = computed(() => ({
   attribute: filters.value.attribute.length ? filters.value.attribute.join(',') : undefined,
   race: filters.value.race.length ? filters.value.race.join(',') : undefined,
   level: filters.value.level.length ? filters.value.level.join(',') : undefined,
+  set: filters.value.set.length ? filters.value.set.join(',') : undefined,
   collectionId: collectionId.value || undefined,
   sort: filters.value.sort,
   page: filters.value.page,
@@ -406,6 +425,8 @@ const facets = computed<SearchFacets>(() => ({
   attributes: facetsData.value?.attributes ?? [],
   races: facetsData.value?.races ?? [],
   levels: facetsData.value?.levels ?? [],
+  sets: facetsData.value?.sets ?? [],
+  hasUnknownPrinting: facetsData.value?.hasUnknownPrinting ?? false,
 }))
 
 function openAdd(card: CatalogCard) {
@@ -544,7 +565,11 @@ const moveEntries = ref<MoveEntry[]>([])
 function moveEntryFor(item: InventoryItem): MoveEntry {
   return {
     ownedCardId: item.id,
-    name: cardName({ name: item.cardName, nameDe: item.cardNameDe }),
+    // Two printings of one card in one collection are two stacks: the
+    // printing tells them apart in the move dialog (ADR 0034).
+    name: item.printingSetCode
+      ? `${cardName({ name: item.cardName, nameDe: item.cardNameDe })} · ${printingShortLabel({ setCode: item.printingSetCode, rarity: item.printingRarity, rarityCode: item.printingRarityCode })}`
+      : cardName({ name: item.cardName, nameDe: item.cardNameDe }),
     quantity: item.quantity,
     collectionId: item.collectionId,
   }

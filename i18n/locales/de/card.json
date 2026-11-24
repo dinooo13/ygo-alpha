@@ -36,7 +36,8 @@
       "attribute": "Attribut",
       "race": "Monsterart",
       "level": "Stufe/Rang",
-      "kind": "Kartenart"
+      "kind": "Kartenart",
+      "printing": "Printing"
     },
     "value": {
       "type": {

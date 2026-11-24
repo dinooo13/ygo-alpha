@@ -36,7 +36,8 @@
       "attribute": "Attribute",
       "race": "Monster type",
       "level": "Level/Rank",
-      "kind": "Card kind"
+      "kind": "Card kind",
+      "printing": "Printing"
     },
     "value": {
       "type": {

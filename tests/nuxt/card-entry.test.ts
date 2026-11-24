@@ -201,6 +201,28 @@ describe('suggestCatalogMatches', () => {
     })
   })
 
+  it('returns the card\'s printings under the set code, one per rarity (ADR 0034)', () => {
+    const [single] = suggestCatalogMatches(db, parseEntryLine('sdy-006'))
+    expect(single!.printings).toEqual([{
+      id: `${CATALOG_FIXTURE_IDS.darkMagician}|SDY-006|UR`,
+      setCode: 'SDY-006',
+      setName: 'Starter Deck: Yugi',
+      rarity: 'Ultra Rare',
+      rarityCode: 'UR',
+    }])
+
+    // LC01-EN004 comes in two rarities, one without a rarity code.
+    const [several] = suggestCatalogMatches(db, parseEntryLine('Blue-Eyes White Dragon (LC01-EN004)'))
+    expect(several).toMatchObject({ cardId: CATALOG_FIXTURE_IDS.blueEyesWhiteDragon, matchedBy: 'set_code' })
+    expect(several!.printings!.map(printing => [printing.rarity, printing.rarityCode, printing.setName])).toEqual([
+      ['Ultra Rare', 'UR', 'Legendary Collection'],
+      ['Quarter Century Secret Rare', null, 'Legendary Collection: 25th Anniversary Edition'],
+    ])
+
+    // Without a set code there is nothing to preselect.
+    expect(suggestCatalogMatches(db, parseEntryLine('Dark Magician'))[0]).not.toHaveProperty('printings')
+  })
+
   it('keeps both cards when the set code contradicts the name', () => {
     const candidates = suggestCatalogMatches(db, parseEntryLine('Pot of Greed (SDY-006)'))
 

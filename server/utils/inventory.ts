@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm'
 import { createError } from 'h3'
 import type { useDb } from '../db'
-import { catalogCard, ownedCard } from '../db/schema'
+import { catalogCard, catalogPrinting, catalogSet, ownedCard } from '../db/schema'
 import { CARD_TEXT_EXCERPT_LENGTH, MAX_OWNED_QUANTITY, UNASSIGNED_COLLECTION_ID } from '../../shared/inventory'
 import type { CardKind } from '../../shared/card-kind'
 import type { AppLocale } from '../../shared/locale'
@@ -11,7 +11,7 @@ import { primaryImageUrlSql } from './card-image-sql'
 import { resolvePasscode } from './card-passcode'
 import { cardDescDeSql, cardNameDeSql, cardSortKey } from './card-translation-sql'
 import { assertCollectionOwnedByUser } from './collections'
-import { inventoryCardFilterClauses, parseInventorySearchQuery } from './inventory-search'
+import { inventoryCardFilterClauses, parseInventorySearchQuery, printingSetFilterClause } from './inventory-search'
 
 type Db = ReturnType<typeof useDb>
 
@@ -20,15 +20,21 @@ type Db = ReturnType<typeof useDb>
 export const MAX_QUANTITY = MAX_OWNED_QUANTITY
 
 /**
- * One owned-card stack (ADR 0017): a catalog card in a collection (or none),
- * with a quantity and a note. No printing, language, condition or edition.
+ * One owned-card stack (ADR 0017, ADR 0034): a catalog card in a collection
+ * (or none) and a printing (or none = "printing unknown"), with a quantity
+ * and a note. No language, condition or edition.
  */
 export interface InventoryInput {
   catalogCardId: number
   collectionId: string | null
+  /** A `catalog_printing.id` of the card, or `null` = printing unknown. */
+  printingId: string | null
   quantity: number
   note: string | null
 }
+
+/** How a write treats a `printingId` that is not a printing of the card. */
+export type UnknownPrintingPolicy = 'reject' | 'drop'
 
 export interface InventoryListOptions {
   q?: string
@@ -39,6 +45,9 @@ export interface InventoryListOptions {
   // Only the rows of this catalog card, for the inventory's detail panel
   // (`InventoryOwnedCardEditor`).
   catalogCardId?: number
+  // Set ids and/or `UNKNOWN_PRINTING_FILTER`: only the stacks of a printing
+  // in one of these sets (or without a printing), ADR 0034.
+  set?: string[]
   // The search panel's card filters, as in the aggregated search (#145).
   inText?: boolean
   kind?: CardKind[]
@@ -98,10 +107,12 @@ function normalizeOptionalString(value: unknown, field: string): string | null {
 }
 
 /**
- * Validates a create body. Unknown keys are silently ignored — in particular
- * the former collector fields (`printing_id`/`printingId`, `language`,
- * `condition`, `edition`; ADR 0017), which old PWA clients, E2E seeds and
- * already stored `add_to_inventory` assistant actions may still send.
+ * Validates a create body's shape. `printing_id`/`printingId` is optional
+ * (ADR 0034); whether it is a printing of the card is checked against the
+ * database (`resolvePrintingId`). Unknown keys are silently ignored — in
+ * particular the former collector fields `language`, `condition` and
+ * `edition` (ADR 0017), which old PWA clients and stored assistant actions
+ * may still send.
  */
 export function validateInventoryInput(body: unknown): InventoryInput {
   if (!isRecord(body)) {
@@ -111,6 +122,7 @@ export function validateInventoryInput(body: unknown): InventoryInput {
   return {
     catalogCardId: normalizePositiveInteger(body.catalog_card_id ?? body.catalogCardId, 'catalog_card_id'),
     collectionId: normalizeOptionalString(body.collection_id ?? body.collectionId, 'collection_id'),
+    printingId: normalizeOptionalString(body.printing_id ?? body.printingId, 'printing_id'),
     quantity: normalizePositiveInteger(body.quantity, 'quantity', 1, MAX_QUANTITY),
     note: normalizeOptionalString(body.note, 'note'),
   }
@@ -118,7 +130,8 @@ export function validateInventoryInput(body: unknown): InventoryInput {
 
 /**
  * Validates a PATCH body. Like `validateInventoryInput`, unknown keys —
- * including the former collector fields — are silently ignored.
+ * including the former collector fields — are silently ignored. A
+ * `printingId` of `null` or `''` clears the printing.
  */
 export function validateInventoryUpdateInput(body: unknown): Partial<InventoryInput> {
   if (!isRecord(body)) {
@@ -138,8 +151,40 @@ export function validateInventoryUpdateInput(body: unknown): Partial<InventoryIn
   if (body.note !== undefined) {
     input.note = normalizeOptionalString(body.note, 'note')
   }
+  if (body.printing_id !== undefined || body.printingId !== undefined) {
+    input.printingId = normalizeOptionalString(body.printing_id ?? body.printingId, 'printing_id')
+  }
 
   return input
+}
+
+/**
+ * Checks that `printingId` is a printing of `catalogCardId` (ADR 0034).
+ * `reject` (the API) answers 400 `printing_not_found`; `drop` (stored
+ * assistant actions, whose printing may predate ADR 0034's keys or have been
+ * pruned by a sync since) keeps the copies as "printing unknown".
+ */
+export function resolvePrintingId(
+  db: Db,
+  catalogCardId: number,
+  printingId: string | null,
+  policy: UnknownPrintingPolicy = 'reject',
+): string | null {
+  if (printingId === null) {
+    return null
+  }
+  const printing = db
+    .select({ id: catalogPrinting.id })
+    .from(catalogPrinting)
+    .where(and(eq(catalogPrinting.id, printingId), eq(catalogPrinting.cardId, catalogCardId)))
+    .get()
+  if (printing) {
+    return printing.id
+  }
+  if (policy === 'drop') {
+    return null
+  }
+  badRequest('printing_id is not a printing of this card', 'printing_not_found')
 }
 
 export function ensureCatalogCardExists(db: Db, catalogCardId: number) {
@@ -149,12 +194,18 @@ export function ensureCatalogCardExists(db: Db, catalogCardId: number) {
   }
 }
 
-// The owned-card grain (ADR 0017): one row per (user, catalog card, collection).
-function sameTupleWhere(userId: string, input: InventoryInput, exceptId?: string) {
+/** The fields that identify a stack (ADR 0034): one row per (user, card, collection, printing). */
+export type OwnedCardTuple = Pick<InventoryInput, 'catalogCardId' | 'collectionId' | 'printingId'>
+
+// The owned-card grain (ADR 0017, ADR 0034): one row per
+// (user, catalog card, collection, printing). A NULL printing ("printing
+// unknown") is its own stack, like a NULL collection.
+export function sameTupleWhere(userId: string, input: OwnedCardTuple, exceptId?: string) {
   const clauses = [
     eq(ownedCard.userId, userId),
     eq(ownedCard.catalogCardId, input.catalogCardId),
     input.collectionId ? eq(ownedCard.collectionId, input.collectionId) : isNull(ownedCard.collectionId),
+    input.printingId ? eq(ownedCard.printingId, input.printingId) : isNull(ownedCard.printingId),
   ]
 
   if (exceptId) {
@@ -166,11 +217,14 @@ function sameTupleWhere(userId: string, input: InventoryInput, exceptId?: string
 
 export type OwnedCardRow = typeof ownedCard.$inferSelect
 
-/** An owned-card row as the API returns it: without the unused collector columns (ADR 0017). */
-export type OwnedCardView = Omit<OwnedCardRow, 'printingId' | 'language' | 'condition' | 'edition'>
+/**
+ * An owned-card row as the API returns it: with its `printingId` (ADR 0034),
+ * without the unused collector columns (ADR 0017).
+ */
+export type OwnedCardView = Omit<OwnedCardRow, 'language' | 'condition' | 'edition'>
 
 export function toOwnedCardView(row: OwnedCardRow): OwnedCardView {
-  const { printingId: _printingId, language: _language, condition: _condition, edition: _edition, ...view } = row
+  const { language: _language, condition: _condition, edition: _edition, ...view } = row
   return view
 }
 
@@ -237,6 +291,7 @@ function upsertOwnedCardRow(
       userId,
       catalogCardId: input.catalogCardId,
       collectionId: input.collectionId,
+      printingId: input.printingId,
       quantity: input.quantity,
       note: input.note,
       createdAt: now,
@@ -253,8 +308,9 @@ export async function addOwnedCard(db: Db, userId: string, input: InventoryInput
   if (input.collectionId) {
     assertCollectionOwnedByUser(db, userId, input.collectionId)
   }
+  const printingId = resolvePrintingId(db, input.catalogCardId, input.printingId)
 
-  return toOwnedCardView(upsertOwnedCardRow(db, userId, input).row)
+  return toOwnedCardView(upsertOwnedCardRow(db, userId, { ...input, printingId }).row)
 }
 
 export const INVENTORY_BULK_MAX_ITEMS = 200
@@ -308,7 +364,12 @@ function clientItemError(error: unknown): Omit<InventoryBulkItemError, 'index'> 
  * existence, and collection ownership. Fails with a single 400 carrying every
  * offending item's index, so the review UI can mark the exact rows.
  */
-export function validateInventoryBulkInput(db: Db, userId: string, body: unknown): InventoryInput[] {
+export function validateInventoryBulkInput(
+  db: Db,
+  userId: string,
+  body: unknown,
+  options: { unknownPrinting?: UnknownPrintingPolicy } = {},
+): InventoryInput[] {
   if (!isRecord(body)) {
     badRequest('Request body must be an object')
   }
@@ -334,7 +395,8 @@ export function validateInventoryBulkInput(db: Db, userId: string, body: unknown
       if (input.collectionId) {
         assertCollectionOwnedByUser(db, userId, input.collectionId)
       }
-      inputs.push(input)
+      const printingId = resolvePrintingId(db, input.catalogCardId, input.printingId, options.unknownPrinting)
+      inputs.push({ ...input, printingId })
     }
     catch (error) {
       const itemError = clientItemError(error)
@@ -429,9 +491,15 @@ function updateOwnedCardSync(
     ownedCardNotFound()
   }
 
+  const catalogCardId = patch.catalogCardId ?? current.catalogCardId
   const input: InventoryInput = {
-    catalogCardId: patch.catalogCardId ?? current.catalogCardId,
+    catalogCardId,
     collectionId: patch.collectionId !== undefined ? patch.collectionId : current.collectionId,
+    // A printing belongs to its card: another card without a new printing
+    // means "printing unknown".
+    printingId: patch.printingId !== undefined
+      ? patch.printingId
+      : catalogCardId === current.catalogCardId ? current.printingId : null,
     quantity: patch.quantity ?? current.quantity,
     note: patch.note !== undefined ? patch.note : current.note,
   }
@@ -439,6 +507,11 @@ function updateOwnedCardSync(
   ensureCatalogCardExists(db, input.catalogCardId)
   if (input.collectionId) {
     assertCollectionOwnedByUser(db, userId, input.collectionId)
+  }
+  // Only a printing the request names is checked; the row's own one stays
+  // even if a sync has since pruned it (the FK then already cleared it).
+  if (patch.printingId !== undefined) {
+    input.printingId = resolvePrintingId(db, input.catalogCardId, input.printingId)
   }
 
   const colliding = db.select().from(ownedCard).where(sameTupleWhere(userId, input, id)).get()
@@ -466,6 +539,7 @@ function updateOwnedCardSync(
     .set({
       catalogCardId: input.catalogCardId,
       collectionId: input.collectionId,
+      printingId: input.printingId,
       quantity: input.quantity,
       note: input.note,
       updatedAt: now,
@@ -503,6 +577,8 @@ export interface InventoryMoveItemResult {
   /** The stack the copies came from. */
   ownedCardId: string
   catalogCardId: number
+  /** The printing of the copies (ADR 0034); it moves with them. */
+  printingId: string | null
   fromCollectionId: string | null
   toCollectionId: string | null
   /** How many copies moved. */
@@ -667,9 +743,11 @@ export function moveOwnedCards(db: Db, userId: string, inputs: InventoryMoveInpu
       else {
         remaining = source.quantity - quantity
         txDb.update(ownedCard).set({ quantity: remaining, updatedAt: new Date() }).where(eq(ownedCard.id, source.id)).run()
+        // The split-off copies keep their printing (ADR 0034).
         resultId = upsertOwnedCardRow(txDb, userId, {
           catalogCardId: source.catalogCardId,
           collectionId: input.toCollectionId,
+          printingId: source.printingId,
           quantity,
           note: null,
         }).row.id
@@ -679,6 +757,7 @@ export function moveOwnedCards(db: Db, userId: string, inputs: InventoryMoveInpu
       items.push({
         ownedCardId: source.id,
         catalogCardId: source.catalogCardId,
+        printingId: source.printingId,
         fromCollectionId: source.collectionId,
         toCollectionId: input.toCollectionId,
         quantity,
@@ -700,7 +779,7 @@ export function parseInventoryListQuery(query: Record<string, unknown>): Invento
   const catalogCardId = typeof query.catalogCardId === 'string' ? Number(query.catalogCardId) : Number.NaN
   // The card filters parse like the aggregated search's (CSV and/or
   // repeated params).
-  const { inText, kind, type, attribute, race, level } = parseInventorySearchQuery(query)
+  const { inText, kind, type, attribute, race, level, set } = parseInventorySearchQuery(query)
   return {
     q: typeof query.q === 'string' ? query.q : undefined,
     page: typeof query.page === 'string' ? Number(query.page) : undefined,
@@ -713,6 +792,7 @@ export function parseInventoryListQuery(query: Record<string, unknown>): Invento
     attribute,
     race,
     level,
+    set,
   }
 }
 
@@ -744,6 +824,10 @@ export function listOwnedCards(db: Db, userId: string, options: InventoryListOpt
   if (options.catalogCardId !== undefined) {
     clauses.push(eq(ownedCard.catalogCardId, options.catalogCardId))
   }
+  const printingClause = printingSetFilterClause(options.set ?? [])
+  if (printingClause) {
+    clauses.push(printingClause)
+  }
   const where = and(...clauses)
 
   const rows = db
@@ -755,6 +839,12 @@ export function listOwnedCards(db: Db, userId: string, options: InventoryListOpt
       note: ownedCard.note,
       createdAt: ownedCard.createdAt,
       updatedAt: ownedCard.updatedAt,
+      // The stack's printing (ADR 0034), `null` = printing unknown.
+      printingId: ownedCard.printingId,
+      printingSetCode: catalogPrinting.setCode,
+      printingRarity: catalogPrinting.rarity,
+      printingRarityCode: catalogPrinting.rarityCode,
+      printingSetName: catalogSet.name,
       cardName: catalogCard.name,
       cardNameDe: cardNameDeSql(),
       cardType: catalogCard.type,
@@ -768,6 +858,8 @@ export function listOwnedCards(db: Db, userId: string, options: InventoryListOpt
     })
     .from(ownedCard)
     .innerJoin(catalogCard, eq(ownedCard.catalogCardId, catalogCard.id))
+    .leftJoin(catalogPrinting, eq(ownedCard.printingId, catalogPrinting.id))
+    .leftJoin(catalogSet, eq(catalogPrinting.setId, catalogSet.id))
     .where(where)
     .orderBy(desc(ownedCard.updatedAt))
     .limit(pageSize)

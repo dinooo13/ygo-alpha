@@ -108,7 +108,8 @@
         "quantity": "Quantity",
         "newQuantity": "New quantity",
         "section": "Section",
-        "collectionId": "Collection"
+        "collectionId": "Collection",
+        "printing": "Printing"
       },
       "unknownCollection": "Unknown collection",
       "meta": {

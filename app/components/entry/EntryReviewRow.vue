@@ -3,9 +3,13 @@ import {
   DEFAULT_VALUE,
   MAX_ENTRY_QUANTITY,
   NO_COLLECTION_VALUE,
+  defaultPrintingId,
   entryRowStatus,
+  needsRarity,
+  rowPrintings,
   selectedCandidate,
 } from '~/utils/card-entry'
+import { printingRarityLabel } from '~~/shared/printing'
 import type { EntryCandidate, EntryRow } from '~/utils/card-entry'
 import type { CardDetailPreview } from '~/utils/card-detail'
 
@@ -74,12 +78,35 @@ const candidateItems = computed(() => props.row.candidates.map(candidate => ({
 const candidateValue = computed({
   get: () => props.row.selectedCardId === null ? undefined : String(props.row.selectedCardId),
   set: (value: string | undefined) => {
+    const selectedCardId = value === undefined ? null : Number(value)
     emit('update', {
-      selectedCardId: value === undefined ? null : Number(value),
+      selectedCardId,
+      // The printing belongs to the card: start over with the new card's.
+      printingId: defaultPrintingId(props.row.candidates.find(candidate => candidate.cardId === selectedCardId)),
       // The user just decided which card this line is.
       conflict: false,
     })
   },
+})
+
+// The printing under the parsed set code (ADR 0034): one is preselected;
+// several rarities ask for a pick. "Printing unbekannt" stays possible.
+const UNKNOWN_PRINTING_VALUE = '__unknown__'
+const printings = computed(() => rowPrintings(props.row))
+const askRarity = computed(() => needsRarity(props.row))
+const printingItems = computed(() => [
+  { label: t('inventory.printing.unknown'), value: UNKNOWN_PRINTING_VALUE },
+  ...printings.value.map(printing => ({
+    label: [printingRarityLabel(printing), printing.setName].filter(Boolean).join(' · '),
+    value: printing.id,
+  })),
+])
+const printingValue = computed({
+  // Asking: the placeholder shows instead of "unknown".
+  get: () => props.row.printingId ?? (askRarity.value ? undefined : UNKNOWN_PRINTING_VALUE),
+  set: (value: string | undefined) => emit('update', {
+    printingId: !value || value === UNKNOWN_PRINTING_VALUE ? null : value,
+  }),
 })
 
 const quantityValue = computed({
@@ -117,9 +144,10 @@ function onPicked(card: PickedCatalogCard) {
   emit('update', {
     candidates: [candidate, ...props.row.candidates.filter(entry => entry.cardId !== candidate.cardId)],
     selectedCardId: candidate.cardId,
-    // The parsed set code belonged to the old guess, not to the card the
-    // user just pointed this row at.
+    // The parsed set code (and its printing) belonged to the old guess, not
+    // to the card the user just pointed this row at.
     setCode: null,
+    printingId: null,
     conflict: false,
   })
   isPickerOpen.value = false
@@ -233,6 +261,29 @@ function onPicked(card: PickedCatalogCard) {
         :label="t('quickEntry.row.catalog')"
         @click="() => { isPickerOpen = true }"
       />
+    </div>
+
+    <div
+      v-if="printings.length > 0"
+      class="flex flex-wrap items-center gap-2"
+      data-testid="entry-printing"
+    >
+      <span class="text-xs text-muted">{{ t('quickEntry.row.printing', { setCode: printings[0]!.setCode }) }}</span>
+      <USelect
+        v-model="printingValue"
+        :items="printingItems"
+        :placeholder="t('quickEntry.row.pickRarity')"
+        :aria-label="t('quickEntry.row.printingFor', { line: row.raw })"
+        :color="askRarity ? 'warning' : undefined"
+        :highlight="askRarity"
+        class="min-w-0 flex-1 sm:max-w-md"
+      />
+      <p
+        v-if="askRarity"
+        class="w-full text-xs text-warning"
+      >
+        {{ t('quickEntry.row.severalRarities', { setCode: printings[0]!.setCode, count: printings.length }) }}
+      </p>
     </div>
 
     <UModal

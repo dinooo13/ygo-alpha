@@ -29,6 +29,7 @@ import { cardFrame } from '~~/shared/card-frame'
 import { CARD_LEVEL_ICON, cardLevel } from '~/utils/card-level'
 import type { CardDetailPreview, CardDetailSummary, CardDetailVariant } from '~/utils/card-detail'
 import { formatCardStat } from '~~/shared/card-stats'
+import { printingRarityLabel } from '~~/shared/printing'
 
 const props = withDefaults(defineProps<{
   cardId: number | null
@@ -272,7 +273,7 @@ const hasDates = computed(() => Boolean(detail.value?.card.tcgDate || detail.val
               <ul class="mt-2 divide-y divide-default overflow-hidden rounded-lg border border-default">
                 <li
                   v-for="printing in detail.printings"
-                  :key="printing.setCode"
+                  :key="printing.id ?? printing.setCode"
                   class="p-3 text-sm"
                 >
                   <p class="font-medium break-words text-highlighted">
@@ -280,8 +281,8 @@ const hasDates = computed(() => Boolean(detail.value?.card.tcgDate || detail.val
                   </p>
                   <p class="mt-1 break-words text-muted">
                     {{ printing.setCode }}
-                    <template v-if="printing.rarity">
-                      · {{ printing.rarity }}
+                    <template v-if="printing.rarity || printing.rarityCode">
+                      · {{ printingRarityLabel(printing) }}
                     </template>
                   </p>
                 </li>

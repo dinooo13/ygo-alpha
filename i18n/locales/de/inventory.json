@@ -27,7 +27,8 @@
         "nameDesc": "Name (Z-A)",
         "quantity": "Anzahl",
         "newest": "Neueste"
-      }
+      },
+      "set": "Set / Printing"
     },
     "gallery": {
       "loadFailed": "Die Suche konnte nicht geladen werden",
@@ -69,7 +70,8 @@
       "loadFailed": "Deine Kopien konnten nicht geladen werden.",
       "saveFailed": "Die Änderung konnte nicht gespeichert werden.",
       "merged": "Mit den Kopien in {collection} zusammengelegt.",
-      "status": "{collection}: {count} Kopie | {collection}: {count} Kopien"
+      "status": "{collection}: {count} Kopie | {collection}: {count} Kopien",
+      "printing": "Printing ändern ({collection})"
     },
     "picker": {
       "title": "Karte aus dem Katalog wählen",
@@ -114,6 +116,12 @@
       "alreadyThere": "Diese Karten sind schon in dieser Sammlung.",
       "success": "{count} Kopie nach „{collection}“ verschoben | {count} Kopien nach „{collection}“ verschoben",
       "failed": "Die Karten konnten nicht verschoben werden."
+    },
+    "printing": {
+      "label": "Printings",
+      "unknown": "Printing unbekannt",
+      "search": "Set-Code, Seltenheit oder Set suchen...",
+      "hint": "Set-Code und Seltenheit deiner Kopien. Ohne Angabe bleibt das Printing unbekannt."
     }
   }
 }

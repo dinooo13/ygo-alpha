@@ -16,6 +16,7 @@ import { getCatalogCardDetail } from '../../server/utils/catalog-search'
 import { suggestCatalogMatches } from '../../server/utils/card-entry'
 import { parseEntryLine } from '../../server/utils/entry-line'
 import type { RuleSet } from '../../shared/rule-formats'
+import { printingKey } from '../../shared/printing'
 import type { TournamentDeckSnapshot } from '../../shared/tournaments'
 import type { YgoproCard } from '../../server/utils/ygoprodeck'
 import {
@@ -367,7 +368,9 @@ describe('#113: Dark Magician renumbered 46986414 → 46986420', () => {
     await sync(db, [darkMagicianFixture])
 
     db.insert(schema.user).values({ id: 'user-a', name: 'A', email: 'a@example.com', emailVerified: false, createdAt: at, updatedAt: at }).run()
-    db.insert(schema.ownedCard).values({ id: 'own', userId: 'user-a', catalogCardId: OLD, quantity: 2, createdAt: at, updatedAt: at }).run()
+    // A stack with a printing (ADR 0034): it moves to the new card's matching printing.
+    const oldSdy = printingKey({ cardId: OLD, setCode: 'SDY-006', rarity: 'Common' })
+    db.insert(schema.ownedCard).values({ id: 'own', userId: 'user-a', catalogCardId: OLD, printingId: oldSdy, quantity: 2, createdAt: at, updatedAt: at }).run()
     db.insert(schema.deck).values({ id: 'deck-1', userId: 'user-a', name: 'Deck', coverCardId: OLD, createdAt: at, updatedAt: at }).run()
     db.insert(schema.deckCard).values({ id: 'dc', deckId: 'deck-1', catalogCardId: OLD, section: 'main', quantity: 3, createdAt: at, updatedAt: at }).run()
     db.insert(schema.wishlistItem).values({ id: 'wish', userId: 'user-a', catalogCardId: OLD, quantity: 1, createdAt: at, updatedAt: at }).run()
@@ -380,17 +383,26 @@ describe('#113: Dark Magician renumbered 46986414 → 46986420', () => {
     expect(cardState(db, OLD)).toMatchObject({ retiredAt: expect.any(Date), replacedById: NEW })
     expect(cardState(db, NEW)).toEqual({ retiredAt: null, replacedById: null })
 
-    expect(db.select().from(schema.ownedCard).get()!.catalogCardId).toBe(NEW)
+    expect(db.select().from(schema.ownedCard).get()).toMatchObject({
+      catalogCardId: NEW,
+      printingId: printingKey({ cardId: NEW, setCode: 'SDY-006', rarity: 'Common' }),
+      quantity: 2,
+    })
     expect(db.select().from(schema.deckCard).get()!.catalogCardId).toBe(NEW)
     expect(db.select().from(schema.deck).get()!.coverCardId).toBe(NEW)
     expect(db.select().from(schema.wishlistItem).get()!.catalogCardId).toBe(NEW)
 
-    // The old passcode is now an artwork of the new card; the printings follow.
+    // The old passcode is now an artwork of the new card. The printings are
+    // keyed by card (ADR 0034): the new card gets its own, the old card's
+    // two are pruned.
     const images = db.select().from(schema.catalogCardImage).all()
     expect(images.map(row => [row.id, row.cardId]).sort()).toEqual([[OLD, NEW], [NEW, NEW]])
     const printings = db.select().from(schema.catalogPrinting).all()
-    expect(printings.map(row => [row.id, row.cardId]).sort()).toEqual([['LOB-005', NEW], ['SDY-006', NEW]])
-    expect(result.cleanup).toEqual({ printings: 0, images: 0, skipped: false })
+    expect(printings.map(row => [row.id, row.cardId]).sort()).toEqual([
+      [printingKey({ cardId: NEW, setCode: 'LOB-005', rarity: 'Ultra Rare' }), NEW],
+      [printingKey({ cardId: NEW, setCode: 'SDY-006', rarity: 'Common' }), NEW],
+    ])
+    expect(result.cleanup).toEqual({ printings: 2, images: 0, skipped: false })
 
     // A card row wins over the artwork with the same id: the retired row.
     const detail = await getCatalogCardDetail(db, OLD)
@@ -422,12 +434,14 @@ describe('pruneUnlistedCatalogRows (through syncCatalog, ADR 0023)', () => {
     }
   }
 
+  const SDY = printingKey({ cardId: darkMagicianFixture.id, setCode: 'SDY-006', rarity: 'Common' })
+  const LOB = printingKey({ cardId: darkMagicianFixture.id, setCode: 'LOB-005', rarity: 'Ultra Rare' })
+
   async function seedFirstSync(db: TestDb) {
     await sync(db, [darkMagicianFixture, oddEyesStaleFixture, placeholderFixture, droppedFixture])
     db.insert(schema.user).values({ id: 'user-a', name: 'A', email: 'a@example.com', emailVerified: false, createdAt: at, updatedAt: at }).run()
-    // The legacy printing column (hidden since ADR 0017).
     db.insert(schema.ownedCard).values({
-      id: 'own', userId: 'user-a', catalogCardId: darkMagicianFixture.id, printingId: 'SDY-006', quantity: 1, createdAt: at, updatedAt: at,
+      id: 'own', userId: 'user-a', catalogCardId: darkMagicianFixture.id, printingId: SDY, quantity: 1, createdAt: at, updatedAt: at,
     }).run()
   }
 
@@ -440,7 +454,7 @@ describe('pruneUnlistedCatalogRows (through syncCatalog, ADR 0023)', () => {
     // SDY-006 and the placeholder's image 101402024.
     expect(result.cleanup).toEqual({ printings: 1, images: 1, skipped: false })
     expect(catalogRows(db)).toEqual({
-      printings: ['LOB-005'],
+      printings: [LOB],
       images: [
         [darkMagicianFixture.id, darkMagicianFixture.id],
         // A retired card without a replacement keeps its only picture.
@@ -451,7 +465,8 @@ describe('pruneUnlistedCatalogRows (through syncCatalog, ADR 0023)', () => {
         [placeholderRealFixture.id, placeholderRealFixture.id],
       ].sort(),
     })
-    // The owned row stays; only the legacy printing reference is cleared.
+    // The owned row stays; SDY-006 has no listed counterpart, so its printing
+    // becomes unknown (ADR 0034).
     expect(db.select().from(schema.ownedCard).get()).toMatchObject({ id: 'own', quantity: 1, printingId: null })
 
     // Idempotent.
@@ -469,6 +484,37 @@ describe('pruneUnlistedCatalogRows (through syncCatalog, ADR 0023)', () => {
     expect(result.retirement.skipped).toBe(true)
     expect(result.cleanup).toEqual({ printings: 0, images: 0, skipped: true })
     expect(catalogRows(db)).toEqual(before)
-    expect(db.select().from(schema.ownedCard).get()!.printingId).toBe('SDY-006')
+    expect(db.select().from(schema.ownedCard).get()!.printingId).toBe(SDY)
+  })
+
+  it('moves an owned printing to its new key when the rarity code arrives (ADR 0034)', async () => {
+    const db = createTestDb()
+    await seedFirstSync(db)
+    const withRarityCodes: YgoproCard = {
+      ...darkMagicianFixture,
+      card_sets: darkMagicianFixture.card_sets!.map(set => ({ ...set, set_rarity_code: set.set_code === 'SDY-006' ? '(C)' : '(UR)' })),
+    }
+
+    const result = await sync(db, [withRarityCodes, oddEyesWithOldArtwork, placeholderRealFixture])
+
+    const sdyWithCode = printingKey({ cardId: darkMagicianFixture.id, setCode: 'SDY-006', rarityCode: 'C' })
+    expect(result.cleanup.printings).toBe(2)
+    expect(catalogRows(db).printings).toEqual([printingKey({ cardId: darkMagicianFixture.id, setCode: 'LOB-005', rarityCode: 'UR' }), sdyWithCode].sort())
+    expect(db.select().from(schema.ownedCard).get()).toMatchObject({ id: 'own', quantity: 1, printingId: sdyWithCode })
+  })
+
+  it('merges a stack whose printing is dropped into the "printing unknown" stack', async () => {
+    const db = createTestDb()
+    await seedFirstSync(db)
+    db.insert(schema.ownedCard).values({
+      id: 'own-unknown', userId: 'user-a', catalogCardId: darkMagicianFixture.id, quantity: 2, note: 'Binder', createdAt: at, updatedAt: at,
+    }).run()
+
+    await sync(db, [darkMagicianLobOnly, oddEyesWithOldArtwork, placeholderRealFixture])
+
+    // Every copy stays: 1 + 2 in one stack, never two stacks with the same tuple.
+    expect(db.select().from(schema.ownedCard).all()).toEqual([
+      expect.objectContaining({ id: 'own-unknown', printingId: null, quantity: 3, note: 'Binder' }),
+    ])
   })
 })

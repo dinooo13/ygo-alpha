@@ -6,7 +6,7 @@ import { mergeDecklistEntries } from '../../shared/decklist'
 import type { DecklistEntry } from '../../shared/decklist'
 import { DECK_SECTIONS } from '../../shared/deck-sections'
 import type { useDb } from '../db'
-import { catalogCard, catalogCardTranslation, catalogPrinting } from '../db/schema'
+import { catalogCard, catalogCardTranslation, catalogPrinting, catalogSet } from '../db/schema'
 import { primaryImageUrlSql } from './card-image-sql'
 import { activeCatalogCard, escapedLike, escapeLikeTerm } from './card-name-search'
 import { resolvePasscode } from './card-passcode'
@@ -40,6 +40,20 @@ export interface EntryCandidate {
   /** 0..1 confidence; 1 for passcode/set code/exact name hits. */
   score: number
   matchedBy: EntryMatchedBy
+  /**
+   * With a set code in the line: the card's printings under that code
+   * (ADR 0034), one per rarity. Quick entry preselects a single one and asks
+   * for the rarity when there are several.
+   */
+  printings?: EntryPrinting[]
+}
+
+export interface EntryPrinting {
+  id: string
+  setCode: string
+  setName: string
+  rarity: string | null
+  rarityCode: string | null
 }
 
 export interface EntrySuggestResult {
@@ -447,8 +461,41 @@ export function suggestCatalogMatches(
 ): EntryCandidate[] {
   const limit = normalizeLimit(options.limit)
   const ranked = rankCandidates([...collectScoredCandidates(db, parsed, limit).values()], limit)
+  const candidates = withDisplayData(db, ranked)
 
-  return withDisplayData(db, ranked)
+  if (!parsed.setCode) {
+    return candidates
+  }
+  const printings = printingsBySetCode(db, candidates.map(candidate => candidate.cardId), parsed.setCode)
+  return candidates.map(candidate => ({ ...candidate, printings: printings.get(candidate.cardId) ?? [] }))
+}
+
+/** The printings of `cardIds` under one set code (any case), per card, by rarity. */
+function printingsBySetCode(db: Db, cardIds: number[], setCode: string): Map<number, EntryPrinting[]> {
+  const byCardId = new Map<number, EntryPrinting[]>()
+  if (cardIds.length === 0) {
+    return byCardId
+  }
+  const rows = db
+    .select({
+      cardId: catalogPrinting.cardId,
+      id: catalogPrinting.id,
+      setCode: catalogPrinting.setCode,
+      setName: catalogSet.name,
+      rarity: catalogPrinting.rarity,
+      rarityCode: catalogPrinting.rarityCode,
+    })
+    .from(catalogPrinting)
+    .innerJoin(catalogSet, eq(catalogPrinting.setId, catalogSet.id))
+    .where(and(inArray(catalogPrinting.cardId, cardIds), sql`lower(${catalogPrinting.setCode}) = ${setCode.toLowerCase()}`))
+    .orderBy(catalogSet.name, catalogPrinting.rarity)
+    .all()
+  for (const { cardId, ...printing } of rows) {
+    const list = byCardId.get(cardId) ?? []
+    list.push(printing)
+    byCardId.set(cardId, list)
+  }
+  return byCardId
 }
 
 /**

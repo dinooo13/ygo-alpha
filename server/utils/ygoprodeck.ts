@@ -6,6 +6,7 @@
 // module never paginates.
 
 import { foldCardName } from '../../shared/card-name-fold'
+import { normalizeRarityCode, printingKey } from '../../shared/printing'
 
 const YGOPRODECK_CARDINFO_URL = 'https://db.ygoprodeck.com/api/v7/cardinfo.php'
 
@@ -121,6 +122,8 @@ export interface CatalogPrintingRow {
   setId: string
   setCode: string
   rarity: string | null
+  /** The bare rarity code ("UR"), `null` when YGOPRODeck has none. */
+  rarityCode: string | null
   price: string | null
 }
 
@@ -156,12 +159,16 @@ export function mapCardToRows(card: YgoproCard, syncedAt: Date): MappedCard {
   for (const set of card.card_sets ?? []) {
     const setId = slugifySetName(set.set_name)
     sets.push({ id: setId, name: set.set_name })
+    const rarityCode = normalizeRarityCode(set.set_rarity_code)
+    // One printing per card, set code and rarity (ADR 0034): the set code
+    // alone repeats across rarities, and the sync used to keep only the last.
     printings.push({
-      id: set.set_code,
+      id: printingKey({ cardId: card.id, setCode: set.set_code, rarityCode, rarity: set.set_rarity }),
       cardId: card.id,
       setId,
       setCode: set.set_code,
       rarity: set.set_rarity ?? null,
+      rarityCode,
       price: set.set_price ?? null,
     })
   }
