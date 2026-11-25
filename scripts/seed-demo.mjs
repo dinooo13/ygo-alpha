@@ -80,11 +80,15 @@ async function api(method, path, body, { allow = [] } = {}) {
     cookie = setCookies.map(c => c.split(';')[0]).join('; ')
   }
   const text = await response.text()
-  const data = text ? JSON.parse(text) : null
   if (!response.ok && !allow.includes(response.status)) {
     throw new Error(`${method} ${path} -> ${response.status}: ${text.slice(0, 300)}`)
   }
-  return { status: response.status, data }
+  try {
+    return { status: response.status, data: text ? JSON.parse(text) : null }
+  }
+  catch {
+    throw new Error(`${method} ${path} -> ${response.status}, not JSON (is --url this app?): ${text.slice(0, 120)}`)
+  }
 }
 
 async function login() {
@@ -93,7 +97,7 @@ async function login() {
     email: DEMO.email,
     password: DEMO.password,
     ...(values['invite-code'] ? { inviteCode: values['invite-code'] } : {}),
-  }, { allow: [400, 422] })
+  }, { allow: [422] }) // 422 = the email is taken: log in instead
   if (signUp.status === 200) {
     return true
   }
@@ -111,8 +115,8 @@ async function seed() {
   const binder = (await api('POST', '/api/collections', { name: 'Ordner Blau', description: 'Die Karten fürs GOAT-Deck' })).data
   const trade = (await api('POST', '/api/collections', { name: 'Tauschbox' })).data
 
-  // Some copies in collections, some without; Mirror Force and Raigeki short
-  // for the GOAT deck below, so it shows a shortfall.
+  // Some copies in collections, some without; Summoned Skull, Raigeki and
+  // Mirror Force are one short each for the GOAT deck below.
   await api('POST', '/api/inventory/bulk', {
     items: [
       { catalogCardId: CARD.darkMagician, quantity: 3, collectionId: binder.id },
@@ -171,7 +175,8 @@ async function seed() {
     ],
   })).data
 
-  // GOAT: two Mirror Force and two Raigeki wanted, fewer owned.
+  // GOAT: 3 copies short (see above), and illegal there: too small, Raigeki
+  // and Monster Reborn forbidden, Mirror Force limited but played twice.
   const goat = (await api('POST', '/api/decks', {
     name: 'Dunkler Magier GOAT',
     formatId: 'goat',
@@ -227,10 +232,11 @@ async function seedTournament(deckId) {
   for (const name of ['Mara Kessler', 'Jonas Brandt', 'Ilka Vogt', 'Timo Haas']) {
     tournament = (await api('POST', `/api/tournaments/${tournament.id}/participants`, { name })).data
   }
-  const self = tournament.participants.find(p => p.userId)
-  if (self) {
-    await api('PUT', `/api/tournaments/${tournament.id}/participants/${self.id}/deck`, { deckId })
+  const self = tournament.participants.find(p => p.isSelf)
+  if (!self) {
+    throw new Error('the new tournament has no participant for the demo user')
   }
+  await api('PUT', `/api/tournaments/${tournament.id}/participants/${self.id}/deck`, { deckId })
   tournament = (await api('POST', `/api/tournaments/${tournament.id}/start`)).data
 
   const scores = [{ gamesA: 2, gamesB: 0 }, { gamesA: 1, gamesB: 2 }, { gamesA: 2, gamesB: 1 }]
@@ -249,9 +255,9 @@ async function seedTournament(deckId) {
 
 try {
   const created = await login()
-  const decks = (await api('GET', '/api/decks')).data
-  const hasDecks = Array.isArray(decks) ? decks.length > 0 : (decks?.items?.length ?? 0) > 0
-  if (!created && hasDecks) {
+  // The tournament is created last, so it marks a complete seed.
+  const seeded = !created && (await api('GET', '/api/tournaments')).data.items.length > 0
+  if (seeded) {
     console.log(`seed-demo: ${BASE} already has the demo account; nothing to do`)
   }
   else {
@@ -263,6 +269,7 @@ try {
 }
 catch (error) {
   console.error(`seed-demo: ${error.message}`)
+  console.error('  after a failed run: stop the server, delete .agent/, start it again and rerun')
   if (error.cause?.code === 'ECONNREFUSED') {
     console.error(`  is the server running? start it with: PORT=${new URL(BASE).port || 80} pnpm dev:agent`)
   }

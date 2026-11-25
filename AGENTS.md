@@ -23,17 +23,18 @@ See it work in the T3 preview browser, for every UI change:
 2. `PORT=<34xx> pnpm seed:demo` adds the demo account:
    `demo@example.com` / `demo-duelist-2026`, with collections, an inventory,
    three decks ("Weißer Drache" legal and fully owned, "Dunkler Magier GOAT"
-   3 copies short and too small for GOAT, "Gier-Test" illegal), shares, a
+   3 copies short and illegal for GOAT, "Gier-Test" illegal), shares, a
    public profile at `/players/demo-duelist`, a wishlist and a Swiss
    tournament in round 2.
    Delete `.agent/` while the server is stopped for a fresh database.
 3. Open it with the T3 preview tools: `preview_open` with
-   `target: {kind: "environment-port", port: <34xx>}` and
-   `profileId: "incognito"` (cookies for `localhost` ignore the port, so the
-   user's own profile would lose its session). Click through what you
-   changed, check the hard states that apply (an empty account: register a
-   second user; logged out; phone width; light and dark; English), and keep
-   the preview's screenshots as proof.
+   `target: {kind: "environment-port", port: <34xx>}`,
+   `profileId: "incognito"` and `reuseExistingTab: false` (a reused tab keeps
+   its profile), then use the returned `tabId`. Cookies for `localhost` ignore
+   the port, so logging in from the user's profile would end their session.
+   Click through what you changed, check the hard states that apply (an empty
+   account: register a second user; logged out; phone width; light and dark;
+   English), and keep the preview's screenshots as proof.
 4. Close your preview tab and stop the background command. If something still
    listens on your port, stop that PID (`lsof -ti tcp:<port>`), nothing else.
 
