@@ -67,6 +67,21 @@ jobs:
       - name: Run Playwright E2E tests
         run: pnpm test:e2e
 
+      # AGENTS.md's Verify steps rely on pnpm seed:demo; run it (twice, so the
+      # second run proves it's idempotent) against the app test:e2e just built.
+      - name: Demo seed against the built app
+        env:
+          PORT: 3400
+          NUXT_PUBLIC_BETTER_AUTH_URL: http://localhost:3400
+          NUXT_DB_FILE_PATH: ${{ runner.temp }}/demo/app.db
+          NUXT_E2E_SEED_CATALOG: 1
+          NUXT_ASSISTANT_PROVIDER: fake
+        run: |
+          node .output/server/index.mjs > "$RUNNER_TEMP/demo-server.log" 2>&1 &
+          for _ in $(seq 1 60); do curl -fsS -o /dev/null http://localhost:3400/login && break; sleep 1; done
+          pnpm seed:demo || { cat "$RUNNER_TEMP/demo-server.log"; exit 1; }
+          pnpm seed:demo | grep 'nothing to do'
+
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
