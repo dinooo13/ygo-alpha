@@ -135,6 +135,18 @@ describe('DeckAddMissingToWishlistModal', () => {
     expect(component.emitted('added')).toEqual([[[DARK_MAGICIAN]]])
   })
 
+  it('says so instead of "0 cards added" when all of them were wished elsewhere', async () => {
+    const fetchMock = stubFetch([DARK_MAGICIAN, KURIBOH])
+    const component = await mountModal([card(DARK_MAGICIAN, 'Dark Magician', 2), card(KURIBOH, 'Kuriboh', 1)])
+
+    await button('2 Karten auf die Wunschliste')!.trigger('click')
+    await flushPromises()
+
+    expect(fetchMock.mock.calls).toEqual([['/api/wishlist/ids']])
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ title: 'Alle fehlenden Karten sind schon auf der Wunschliste.' }))
+    expect(component.emitted('update:open')).toEqual([[false]])
+  })
+
   it('posts nothing when the wishlist cannot be read', async () => {
     const fetchMock = vi.fn((url: string) => (
       url === '/api/wishlist/ids' ? Promise.reject(new Error('offline')) : Promise.resolve(null)

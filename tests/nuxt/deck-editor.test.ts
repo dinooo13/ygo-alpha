@@ -2075,11 +2075,14 @@ describe('deck editor wishlist and inventory (#178)', () => {
 
     const modal = component.findComponent(DecksDeckAddMissingToWishlistModal)
     expect(modal.props('open')).toBe(false)
+    // Stardust Dragon was wished on load; Kuriboh is wished in another tab since.
+    state.wishlistIds = [STARDUST, KURIBOH]
     item.onSelect()
     await flushPromises()
 
     // Opening reads the wishlist again: the page's state may be stale.
     expect(callsTo(fetchMock, '/api/wishlist/ids')).toHaveLength(1)
+    expect(isWished(component, 'Kuriboh', 'side')).toBe(true)
 
     expect(modal.props('open')).toBe(true)
     expect(modal.props('cards')).toEqual([
@@ -2093,6 +2096,29 @@ describe('deck editor wishlist and inventory (#178)', () => {
     await flushPromises()
 
     expect(callsTo(fetchMock, '/api/wishlist/ids')).toHaveLength(2)
+    expect(isWished(component, 'Dark Magician', 'main')).toBe(true)
+  })
+
+  it('drops a wishlist reload that overlapped a toggle', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck(1)
+    state.wishlistIds = []
+    let answerIds: (value: { ids: number[] }) => void = () => {}
+    stubFetch(url => (url === '/api/wishlist/ids'
+      ? new Promise((resolve) => { answerIds = resolve })
+      : Promise.resolve(null)))
+
+    const component = await mountPage()
+    // The reload on open is still on its way while Dark Magician is wished.
+    deckMenu(component).find(candidate => candidate.label === 'Fehlende Karten auf die Wunschliste')!.onSelect()
+    rowMenu(component, 'Dark Magician', 'main').at(-1)!.onSelect()
+    await flushPromises()
+    expect(isWished(component, 'Dark Magician', 'main')).toBe(true)
+
+    // Its answer predates the toggle: applied, it would un-wish the card.
+    answerIds({ ids: [] })
+    await flushPromises()
+
     expect(isWished(component, 'Dark Magician', 'main')).toBe(true)
   })
 

@@ -229,12 +229,29 @@ const wishlist = useWishlistToggle(computed(() => wishlistIds.value?.ids ?? []))
 
 // Not `refresh()`: a failed refresh resets `data` to the empty default, and
 // every card would look un-wished. A failure keeps the last known state.
+// Only the newest answer counts, and none that overlapped a toggle: an
+// older list would undo that toggle's state.
+let wishlistGeneration = 0
 async function reloadWishlistIds() {
+  const generation = ++wishlistGeneration
   try {
-    wishlistIds.value = await $fetch<{ ids: number[] }>('/api/wishlist/ids')
+    const fresh = await $fetch<{ ids: number[] }>('/api/wishlist/ids')
+    if (generation === wishlistGeneration) {
+      wishlistIds.value = fresh
+    }
   }
   catch {
     // Keeps the last known state.
+  }
+}
+
+async function toggleWishlistEntry(catalogCardId: number, quantity: number) {
+  wishlistGeneration++
+  try {
+    await wishlist.toggle(catalogCardId, quantity)
+  }
+  finally {
+    wishlistGeneration++
   }
 }
 
@@ -882,7 +899,7 @@ async function toggleWishlist(card: WantedCard, shortfall: number) {
   const id = card.catalogCardId
   const adding = !wishlist.isWishlisted(id)
   const quantity = wishlistQuantity(shortfall)
-  await wishlist.toggle(id, quantity)
+  await toggleWishlistEntry(id, quantity)
   const failed = wishlist.errorFor(id)
   if (failed) {
     toast.add({ title: failed, color: 'error' })
@@ -909,10 +926,11 @@ function openAddToInventory(card: WantedCard, shortfall: number) {
   isAddToInventoryOpen.value = true
 }
 
-// A card not in the deck has no row with a fresh owned total: ask for it.
+// The overlay's own owned total: a card not in the deck has no row with a
+// fresh one, and a deck card falls back to it once its row is gone.
 async function refreshOverlayOwned(catalogCardId: number | undefined) {
   const card = overlayCard.value
-  if (!card || card.id !== catalogCardId || usedByCard.value.has(card.id)) {
+  if (!card || card.id !== catalogCardId) {
     return
   }
   try {
@@ -950,7 +968,7 @@ const overlayShortfall = computed(() => (overlayCard.value ? shortfallFor(overla
 function toggleOverlayWishlist() {
   const card = overlayCard.value
   if (card) {
-    wishlist.toggle(card.id, wishlistQuantity(overlayShortfall.value))
+    toggleWishlistEntry(card.id, wishlistQuantity(overlayShortfall.value))
   }
 }
 

@@ -22,7 +22,7 @@ const emit = defineEmits<{
   added: [catalogCardIds: number[]]
 }>()
 
-const { t, n } = useI18n()
+const { t } = useI18n()
 const { cardName } = useCardText()
 const apiError = useApiError()
 const toast = useToast()
@@ -46,7 +46,10 @@ const toAdd = computed(() => props.cards.filter(card => !card.wishlisted))
 const hasWishlisted = computed(() => props.cards.some(card => card.wishlisted))
 
 async function confirm() {
-  if (toAdd.value.length === 0 || isSaving.value) {
+  // The cards the button promised: a reload of the page's state while the
+  // check below runs must not add more.
+  const candidates = toAdd.value
+  if (candidates.length === 0 || isSaving.value) {
     return
   }
 
@@ -60,7 +63,7 @@ async function confirm() {
     // right before posting; if that fails, nothing is posted.
     const { ids } = await $fetch<{ ids: number[] }>('/api/wishlist/ids')
     const wished = new Set(ids)
-    const cards = toAdd.value.filter(card => !wished.has(card.catalogCardId))
+    const cards = candidates.filter(card => !wished.has(card.catalogCardId))
     for (const card of cards) {
       await $fetch('/api/wishlist', {
         method: 'POST',
@@ -68,7 +71,10 @@ async function confirm() {
       })
       added.push(card.catalogCardId)
     }
-    toast.add({ title: count('decks.editor.missingToWishlist.success', added.length), icon: 'i-lucide-check', color: 'success' })
+    toast.add(added.length > 0
+      ? { title: count('decks.editor.missingToWishlist.success', added.length), icon: 'i-lucide-check', color: 'success' }
+      // All of them were wished elsewhere since the page loaded.
+      : { title: t('decks.editor.missingToWishlist.allWished'), icon: 'i-lucide-heart' })
     openProxy.value = false
   }
   catch (error) {
@@ -124,7 +130,7 @@ async function confirm() {
                 class="font-semibold tabular-nums"
                 :class="card.wishlisted ? 'text-muted' : 'text-warning'"
               >
-                {{ t('decks.editor.missingToWishlist.missingCount', { count: n(card.missing, 'integer') }, card.missing) }}
+                {{ count('decks.editor.missingToWishlist.missingCount', card.missing) }}
               </span>
             </span>
           </li>
