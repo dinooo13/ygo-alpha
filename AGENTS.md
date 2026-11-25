@@ -4,7 +4,8 @@ The dev workflow (branching, PRs, CI gates) lives in `docs/WORKFLOW.md`.
 ## Verify
 
 Install once per checkout (worktrees start without `node_modules`):
-`corepack pnpm install --frozen-lockfile`.
+`corepack pnpm install --frozen-lockfile`. Where `pnpm` isn't on PATH, prefix
+every `pnpm` command below with `corepack`.
 
 Checks, for every change: `pnpm lint`, `pnpm typecheck`, `pnpm test`. For a
 UI or API flow, also `E2E_PORT=<33xx> pnpm test:e2e` (builds the app and uses
@@ -21,8 +22,10 @@ See it work in the T3 preview browser, for every UI change:
    succeeds (about 20 s).
 2. `PORT=<34xx> pnpm seed:demo` adds the demo account:
    `demo@example.com` / `demo-duelist-2026`, with collections, an inventory,
-   decks (legal, short of copies, illegal), shares, a public profile at
-   `/players/demo-duelist`, a wishlist and a Swiss tournament in round 2.
+   three decks ("Weißer Drache" legal and fully owned, "Dunkler Magier GOAT"
+   3 copies short and too small for GOAT, "Gier-Test" illegal), shares, a
+   public profile at `/players/demo-duelist`, a wishlist and a Swiss
+   tournament in round 2.
    Delete `.agent/` while the server is stopped for a fresh database.
 3. Open it with the T3 preview tools: `preview_open` with
    `target: {kind: "environment-port", port: <34xx>}` and
@@ -35,8 +38,9 @@ See it work in the T3 preview browser, for every UI change:
    listens on your port, stop that PID (`lsof -ti tcp:<port>`), nothing else.
 
 A dev server takes about 1.5 GB of memory on a 5 GB box: run one at a time and
-stop it when done. The dev log's "Error during dependency optimization"
-(`@tiptap/core`) is a known lockfile mismatch and doesn't stop the server.
+stop it when done. If the page renders but clicks do nothing, the app didn't
+hydrate: look for "Error during dependency optimization" in the server output;
+while it's there, the browser can't load the app's dependencies.
 
 Only a human can check: the real assistant model, the full catalog and German
 card texts (`catalog:sync` needs the network), the service worker
