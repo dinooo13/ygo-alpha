@@ -164,12 +164,13 @@ export const catalogSet = sqliteTable('catalog_set', {
 
 // A printing is one card in one set with one rarity (YGOPRODeck `card_sets[]`
 // entry, ADR 0034): the join between a card and a set, carrying
-// printing-specific data. Owned cards can reference one (`printing_id`).
+// printing-specific data. Owned cards record a set code and a rarity of their
+// own; the printings are the suggestions.
 export const catalogPrinting = sqliteTable(
   'catalog_printing',
   {
-    // `<card id>|<set code>|<rarity code, else rarity name>` (`printingKey`
-    // in shared/printing.ts). The set code alone is not unique: it repeats
+    // `<card id>|<set code>|<rarity key, else YGOPRODeck's rarity text>`
+    // (`printingKey` in shared/printing.ts). The set code alone is not unique: it repeats
     // across rarities and, in a few YGOPRODeck entries, across cards.
     id: text('id').primaryKey(),
     cardId: integer('card_id')
@@ -179,10 +180,12 @@ export const catalogPrinting = sqliteTable(
       .notNull()
       .references(() => catalogSet.id, { onDelete: 'cascade' }),
     setCode: text('set_code').notNull(),
+    // YGOPRODeck's `set_rarity` as given.
     rarity: text('rarity'),
-    // YGOPRODeck `set_rarity_code` without the parentheses ("UR"); NULL when
-    // it has none, and for rows from before migration 0019 until the next sync.
-    rarityCode: text('rarity_code'),
+    // The rarity key it maps to (`RARITIES`, shared/rarity.ts); NULL when it
+    // names no known rarity ("New", "2"), and for rows from before migration
+    // 0019 until the next sync.
+    rarityKey: text('rarity_key'),
     price: text('price'),
   },
   table => [
@@ -270,11 +273,17 @@ export const ownedCard = sqliteTable(
     catalogCardId: integer('catalog_card_id')
       .notNull()
       .references(() => catalogCard.id, { onDelete: 'cascade' }),
-    // The printing (set code + rarity) of these copies, or NULL = "printing
-    // unknown" (ADR 0034; unused between ADR 0017 and ADR 0034). Part of the
-    // stack's identity: (user, card, collection, printing).
+    // Unused since ADR 0017 and still NULL (ADR 0034 stores `set_code` and
+    // `rarity` instead); kept because SQLite cannot drop a column with a
+    // foreign key.
     printingId: text('printing_id')
       .references(() => catalogPrinting.id, { onDelete: 'set null' }),
+    // The set code of these copies ("LC01-EN004", one of the card's) and
+    // their rarity key (`RARITIES`, shared/rarity.ts); NULL = unknown
+    // (ADR 0034). Part of the stack's identity:
+    // (user, card, collection, set code, rarity).
+    setCode: text('set_code'),
+    rarity: text('rarity'),
     // Owning storage location, or NULL = unassigned (not in any collection).
     // Deleting a collection sets this back to NULL so owned cards survive.
     collectionId: text('collection_id')
@@ -293,7 +302,7 @@ export const ownedCard = sqliteTable(
     index('idx_owned_card_user').on(table.userId),
     index('idx_owned_card_user_card').on(table.userId, table.catalogCardId),
     index('idx_owned_card_collection').on(table.collectionId),
-    index('idx_owned_card_printing').on(table.printingId),
+    index('idx_owned_card_set_code').on(table.catalogCardId, table.setCode),
   ],
 )
 
@@ -305,10 +314,6 @@ export const ownedCardRelations = relations(ownedCard, ({ one }) => ({
   catalogCard: one(catalogCard, {
     fields: [ownedCard.catalogCardId],
     references: [catalogCard.id],
-  }),
-  printing: one(catalogPrinting, {
-    fields: [ownedCard.printingId],
-    references: [catalogPrinting.id],
   }),
   collection: one(collection, {
     fields: [ownedCard.collectionId],

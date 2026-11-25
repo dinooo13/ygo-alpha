@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { CATALOG_FIXTURE_IDS, seedCatalogFixture } from '../../server/db/fixtures/catalog-fixture'
 import * as schema from '../../server/db/schema'
 import { UNASSIGNED_COLLECTION_ID } from '../../shared/inventory'
-import { printingKey } from '../../shared/printing'
 import { createCollection } from '../../server/utils/collections'
 import {
   fillCollectionFromDeck,
@@ -103,10 +102,10 @@ describe('"Sammlung aus Deck befüllen"', () => {
   })
 
   it('takes from every printing stack of a source and the copies keep their printing (ADR 0034)', async () => {
-    const lob = printingKey({ cardId: darkMagician, setCode: 'LOB-005', rarityCode: 'UR' })
-    const sdy = printingKey({ cardId: darkMagician, setCode: 'SDY-006', rarityCode: 'UR' })
-    await addOwnedCard(db, ME, validateInventoryInput({ catalog_card_id: darkMagician, quantity: 1, collection_id: box, printingId: lob }))
-    await addOwnedCard(db, ME, validateInventoryInput({ catalog_card_id: darkMagician, quantity: 1, collection_id: box, printingId: sdy }))
+    const lob = 'LOB-005'
+    const sdy = 'SDY-006'
+    await addOwnedCard(db, ME, validateInventoryInput({ catalog_card_id: darkMagician, quantity: 1, collection_id: box, setCode: lob }))
+    await addOwnedCard(db, ME, validateInventoryInput({ catalog_card_id: darkMagician, quantity: 1, collection_id: box, setCode: sdy }))
     await addOwnedCard(db, ME, validateInventoryInput({ catalog_card_id: darkMagician, quantity: 1, collection_id: box }))
 
     const result = fill({ sourceCollectionIds: [box] })
@@ -115,7 +114,7 @@ describe('"Sammlung aus Deck befüllen"', () => {
     expect(owned(db, darkMagician, target)).toBe(3)
     expect(db.select().from(schema.ownedCard).all()
       .filter(row => row.catalogCardId === darkMagician)
-      .map(row => `${row.collectionId === target ? 'target' : row.collectionId}/${row.printingId ?? '?'}`)
+      .map(row => `${row.collectionId === target ? 'target' : row.collectionId}/${row.setCode ?? '?'}`)
       .sort()).toEqual(['target/?', `target/${lob}`, `target/${sdy}`].sort())
     // The deck still counts every copy, whatever its printing (ADR 0004).
     expect(ownedQuantitiesByCard(db, ME, [darkMagician])).toEqual(new Map([[darkMagician, 3]]))

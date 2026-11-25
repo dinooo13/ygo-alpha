@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm'
 import { createError } from 'h3'
 import type { useDb } from '../db'
-import { catalogCard, catalogPrinting, catalogSet, ownedCard } from '../db/schema'
+import { catalogCard, catalogPrinting, ownedCard } from '../db/schema'
 import { CARD_TEXT_EXCERPT_LENGTH, MAX_OWNED_QUANTITY, UNASSIGNED_COLLECTION_ID } from '../../shared/inventory'
 import type { CardKind } from '../../shared/card-kind'
 import type { AppLocale } from '../../shared/locale'
@@ -11,7 +11,8 @@ import { primaryImageUrlSql } from './card-image-sql'
 import { resolvePasscode } from './card-passcode'
 import { cardDescDeSql, cardNameDeSql, cardSortKey } from './card-translation-sql'
 import { assertCollectionOwnedByUser } from './collections'
-import { inventoryCardFilterClauses, parseInventorySearchQuery, printingSetFilterClause } from './inventory-search'
+import { inventoryCardFilterClauses, ownedSetNameSql, parseInventorySearchQuery, printingSetFilterClause } from './inventory-search'
+import { isRarityKey } from '../../shared/rarity'
 
 type Db = ReturnType<typeof useDb>
 
@@ -21,19 +22,25 @@ export const MAX_QUANTITY = MAX_OWNED_QUANTITY
 
 /**
  * One owned-card stack (ADR 0017, ADR 0034): a catalog card in a collection
- * (or none) and a printing (or none = "printing unknown"), with a quantity
- * and a note. No language, condition or edition.
+ * (or none), with the set code and the rarity of the copies (each optional:
+ * `null` = unknown), a quantity and a note. No language, condition or
+ * edition.
  */
 export interface InventoryInput {
   catalogCardId: number
   collectionId: string | null
-  /** A `catalog_printing.id` of the card, or `null` = printing unknown. */
-  printingId: string | null
+  /** One of the card's set codes ("LC01-EN004"), or `null` = unknown. */
+  setCode: string | null
+  /** A rarity key (`RARITIES`, shared/rarity.ts), or `null` = unknown. */
+  rarity: string | null
   quantity: number
   note: string | null
 }
 
-/** How a write treats a `printingId` that is not a printing of the card. */
+/**
+ * How a write treats a set code that is not one of the card's, or an unknown
+ * rarity key: the API rejects it, stored assistant actions drop it.
+ */
 export type UnknownPrintingPolicy = 'reject' | 'drop'
 
 export interface InventoryListOptions {
@@ -45,8 +52,8 @@ export interface InventoryListOptions {
   // Only the rows of this catalog card, for the inventory's detail panel
   // (`InventoryOwnedCardEditor`).
   catalogCardId?: number
-  // Set ids and/or `UNKNOWN_PRINTING_FILTER`: only the stacks of a printing
-  // in one of these sets (or without a printing), ADR 0034.
+  // Set ids and/or `UNKNOWN_PRINTING_FILTER`: only the stacks with a set code
+  // of one of these sets (or without a set code), ADR 0034.
   set?: string[]
   // The search panel's card filters, as in the aggregated search (#145).
   inText?: boolean
@@ -107,9 +114,9 @@ function normalizeOptionalString(value: unknown, field: string): string | null {
 }
 
 /**
- * Validates a create body's shape. `printing_id`/`printingId` is optional
- * (ADR 0034); whether it is a printing of the card is checked against the
- * database (`resolvePrintingId`). Unknown keys are silently ignored — in
+ * Validates a create body's shape. `set_code`/`setCode` and `rarity` are
+ * optional (ADR 0034); whether they fit the card is checked by
+ * `resolvePrinting`. Unknown keys are silently ignored — in
  * particular the former collector fields `language`, `condition` and
  * `edition` (ADR 0017), which old PWA clients and stored assistant actions
  * may still send.
@@ -122,7 +129,8 @@ export function validateInventoryInput(body: unknown): InventoryInput {
   return {
     catalogCardId: normalizePositiveInteger(body.catalog_card_id ?? body.catalogCardId, 'catalog_card_id'),
     collectionId: normalizeOptionalString(body.collection_id ?? body.collectionId, 'collection_id'),
-    printingId: normalizeOptionalString(body.printing_id ?? body.printingId, 'printing_id'),
+    setCode: normalizeOptionalString(body.set_code ?? body.setCode, 'set_code'),
+    rarity: normalizeOptionalString(body.rarity, 'rarity'),
     quantity: normalizePositiveInteger(body.quantity, 'quantity', 1, MAX_QUANTITY),
     note: normalizeOptionalString(body.note, 'note'),
   }
@@ -131,7 +139,7 @@ export function validateInventoryInput(body: unknown): InventoryInput {
 /**
  * Validates a PATCH body. Like `validateInventoryInput`, unknown keys —
  * including the former collector fields — are silently ignored. A
- * `printingId` of `null` or `''` clears the printing.
+ * `setCode` or `rarity` of `null` or `''` clears it.
  */
 export function validateInventoryUpdateInput(body: unknown): Partial<InventoryInput> {
   if (!isRecord(body)) {
@@ -151,40 +159,60 @@ export function validateInventoryUpdateInput(body: unknown): Partial<InventoryIn
   if (body.note !== undefined) {
     input.note = normalizeOptionalString(body.note, 'note')
   }
-  if (body.printing_id !== undefined || body.printingId !== undefined) {
-    input.printingId = normalizeOptionalString(body.printing_id ?? body.printingId, 'printing_id')
+  if (body.set_code !== undefined || body.setCode !== undefined) {
+    input.setCode = normalizeOptionalString(body.set_code ?? body.setCode, 'set_code')
+  }
+  if (body.rarity !== undefined) {
+    input.rarity = normalizeOptionalString(body.rarity, 'rarity')
   }
 
   return input
 }
 
 /**
- * Checks that `printingId` is a printing of `catalogCardId` (ADR 0034).
- * `reject` (the API) answers 400 `printing_not_found`; `drop` (stored
- * assistant actions, whose printing may predate ADR 0034's keys or have been
- * pruned by a sync since) keeps the copies as "printing unknown".
+ * Checks a stack's printing (ADR 0034): the set code must be one of the
+ * card's (`catalog_printing`), the rarity one of `RARITIES`. Any combination
+ * of the two is allowed: the user may own a rarity YGOPRODeck does not list.
+ * `reject` (the API) answers 400 `set_code_not_found` / `rarity_not_found`;
+ * `drop` (stored assistant actions, written against an older catalog) keeps
+ * the copies with that part unknown. Returns the set code as the catalog
+ * spells it.
  */
-export function resolvePrintingId(
+export function resolvePrinting(
   db: Db,
   catalogCardId: number,
-  printingId: string | null,
+  printing: Pick<InventoryInput, 'setCode' | 'rarity'>,
   policy: UnknownPrintingPolicy = 'reject',
-): string | null {
-  if (printingId === null) {
-    return null
+): Pick<InventoryInput, 'setCode' | 'rarity'> {
+  let setCode: string | null = null
+  if (printing.setCode !== null) {
+    const known = db
+      .select({ setCode: catalogPrinting.setCode })
+      .from(catalogPrinting)
+      .where(and(
+        eq(catalogPrinting.cardId, catalogCardId),
+        sql`upper(${catalogPrinting.setCode}) = ${printing.setCode.toUpperCase()}`,
+      ))
+      .get()
+    if (known) {
+      setCode = known.setCode
+    }
+    else if (policy === 'reject') {
+      badRequest('set_code is not a set code of this card', 'set_code_not_found')
+    }
   }
-  const printing = db
-    .select({ id: catalogPrinting.id })
-    .from(catalogPrinting)
-    .where(and(eq(catalogPrinting.id, printingId), eq(catalogPrinting.cardId, catalogCardId)))
-    .get()
-  if (printing) {
-    return printing.id
+
+  let rarity: string | null = null
+  if (printing.rarity !== null) {
+    if (isRarityKey(printing.rarity)) {
+      rarity = printing.rarity
+    }
+    else if (policy === 'reject') {
+      badRequest('rarity is not a known rarity', 'rarity_not_found')
+    }
   }
-  if (policy === 'drop') {
-    return null
-  }
-  badRequest('printing_id is not a printing of this card', 'printing_not_found')
+
+  return { setCode, rarity }
 }
 
 export function ensureCatalogCardExists(db: Db, catalogCardId: number) {
@@ -194,18 +222,22 @@ export function ensureCatalogCardExists(db: Db, catalogCardId: number) {
   }
 }
 
-/** The fields that identify a stack (ADR 0034): one row per (user, card, collection, printing). */
-export type OwnedCardTuple = Pick<InventoryInput, 'catalogCardId' | 'collectionId' | 'printingId'>
+/**
+ * The fields that identify a stack (ADR 0034): one row per
+ * (user, card, collection, set code, rarity).
+ */
+export type OwnedCardTuple = Pick<InventoryInput, 'catalogCardId' | 'collectionId' | 'setCode' | 'rarity'>
 
 // The owned-card grain (ADR 0017, ADR 0034): one row per
-// (user, catalog card, collection, printing). A NULL printing ("printing
-// unknown") is its own stack, like a NULL collection.
+// (user, catalog card, collection, set code, rarity). A NULL set code or
+// rarity ("unknown") is its own stack, like a NULL collection.
 export function sameTupleWhere(userId: string, input: OwnedCardTuple, exceptId?: string) {
   const clauses = [
     eq(ownedCard.userId, userId),
     eq(ownedCard.catalogCardId, input.catalogCardId),
     input.collectionId ? eq(ownedCard.collectionId, input.collectionId) : isNull(ownedCard.collectionId),
-    input.printingId ? eq(ownedCard.printingId, input.printingId) : isNull(ownedCard.printingId),
+    input.setCode ? eq(ownedCard.setCode, input.setCode) : isNull(ownedCard.setCode),
+    input.rarity ? eq(ownedCard.rarity, input.rarity) : isNull(ownedCard.rarity),
   ]
 
   if (exceptId) {
@@ -218,13 +250,14 @@ export function sameTupleWhere(userId: string, input: OwnedCardTuple, exceptId?:
 export type OwnedCardRow = typeof ownedCard.$inferSelect
 
 /**
- * An owned-card row as the API returns it: with its `printingId` (ADR 0034),
- * without the unused collector columns (ADR 0017).
+ * An owned-card row as the API returns it: with its `setCode` and `rarity`
+ * (ADR 0034), without the unused collector columns (ADR 0017) and the unused
+ * `printing_id`.
  */
-export type OwnedCardView = Omit<OwnedCardRow, 'language' | 'condition' | 'edition'>
+export type OwnedCardView = Omit<OwnedCardRow, 'language' | 'condition' | 'edition' | 'printingId'>
 
 export function toOwnedCardView(row: OwnedCardRow): OwnedCardView {
-  const { language: _language, condition: _condition, edition: _edition, ...view } = row
+  const { language: _language, condition: _condition, edition: _edition, printingId: _printingId, ...view } = row
   return view
 }
 
@@ -291,7 +324,8 @@ function upsertOwnedCardRow(
       userId,
       catalogCardId: input.catalogCardId,
       collectionId: input.collectionId,
-      printingId: input.printingId,
+      setCode: input.setCode,
+      rarity: input.rarity,
       quantity: input.quantity,
       note: input.note,
       createdAt: now,
@@ -308,9 +342,9 @@ export async function addOwnedCard(db: Db, userId: string, input: InventoryInput
   if (input.collectionId) {
     assertCollectionOwnedByUser(db, userId, input.collectionId)
   }
-  const printingId = resolvePrintingId(db, input.catalogCardId, input.printingId)
+  const printing = resolvePrinting(db, input.catalogCardId, input)
 
-  return toOwnedCardView(upsertOwnedCardRow(db, userId, { ...input, printingId }).row)
+  return toOwnedCardView(upsertOwnedCardRow(db, userId, { ...input, ...printing }).row)
 }
 
 export const INVENTORY_BULK_MAX_ITEMS = 200
@@ -395,8 +429,7 @@ export function validateInventoryBulkInput(
       if (input.collectionId) {
         assertCollectionOwnedByUser(db, userId, input.collectionId)
       }
-      const printingId = resolvePrintingId(db, input.catalogCardId, input.printingId, options.unknownPrinting)
-      inputs.push({ ...input, printingId })
+      inputs.push({ ...input, ...resolvePrinting(db, input.catalogCardId, input, options.unknownPrinting) })
     }
     catch (error) {
       const itemError = clientItemError(error)
@@ -495,11 +528,12 @@ function updateOwnedCardSync(
   const input: InventoryInput = {
     catalogCardId,
     collectionId: patch.collectionId !== undefined ? patch.collectionId : current.collectionId,
-    // A printing belongs to its card: another card without a new printing
-    // means "printing unknown".
-    printingId: patch.printingId !== undefined
-      ? patch.printingId
-      : catalogCardId === current.catalogCardId ? current.printingId : null,
+    // A set code belongs to its card: another card without a new set code
+    // means "set code unknown". The rarity is the copies' own and stays.
+    setCode: patch.setCode !== undefined
+      ? patch.setCode
+      : catalogCardId === current.catalogCardId ? current.setCode : null,
+    rarity: patch.rarity !== undefined ? patch.rarity : current.rarity,
     quantity: patch.quantity ?? current.quantity,
     note: patch.note !== undefined ? patch.note : current.note,
   }
@@ -508,10 +542,19 @@ function updateOwnedCardSync(
   if (input.collectionId) {
     assertCollectionOwnedByUser(db, userId, input.collectionId)
   }
-  // Only a printing the request names is checked; the row's own one stays
-  // even if a sync has since pruned it (the FK then already cleared it).
-  if (patch.printingId !== undefined) {
-    input.printingId = resolvePrintingId(db, input.catalogCardId, input.printingId)
+  // Only what the request names is checked; the row's own set code stays
+  // even if YGOPRODeck has since dropped it.
+  if (patch.setCode !== undefined || patch.rarity !== undefined) {
+    const checked = resolvePrinting(db, input.catalogCardId, {
+      setCode: patch.setCode !== undefined ? input.setCode : null,
+      rarity: patch.rarity !== undefined ? input.rarity : null,
+    })
+    if (patch.setCode !== undefined) {
+      input.setCode = checked.setCode
+    }
+    if (patch.rarity !== undefined) {
+      input.rarity = checked.rarity
+    }
   }
 
   const colliding = db.select().from(ownedCard).where(sameTupleWhere(userId, input, id)).get()
@@ -539,7 +582,8 @@ function updateOwnedCardSync(
     .set({
       catalogCardId: input.catalogCardId,
       collectionId: input.collectionId,
-      printingId: input.printingId,
+      setCode: input.setCode,
+      rarity: input.rarity,
       quantity: input.quantity,
       note: input.note,
       updatedAt: now,
@@ -577,8 +621,9 @@ export interface InventoryMoveItemResult {
   /** The stack the copies came from. */
   ownedCardId: string
   catalogCardId: number
-  /** The printing of the copies (ADR 0034); it moves with them. */
-  printingId: string | null
+  /** The set code and rarity of the copies (ADR 0034); they move with them. */
+  setCode: string | null
+  rarity: string | null
   fromCollectionId: string | null
   toCollectionId: string | null
   /** How many copies moved. */
@@ -743,11 +788,12 @@ export function moveOwnedCards(db: Db, userId: string, inputs: InventoryMoveInpu
       else {
         remaining = source.quantity - quantity
         txDb.update(ownedCard).set({ quantity: remaining, updatedAt: new Date() }).where(eq(ownedCard.id, source.id)).run()
-        // The split-off copies keep their printing (ADR 0034).
+        // The split-off copies keep their set code and rarity (ADR 0034).
         resultId = upsertOwnedCardRow(txDb, userId, {
           catalogCardId: source.catalogCardId,
           collectionId: input.toCollectionId,
-          printingId: source.printingId,
+          setCode: source.setCode,
+          rarity: source.rarity,
           quantity,
           note: null,
         }).row.id
@@ -757,7 +803,8 @@ export function moveOwnedCards(db: Db, userId: string, inputs: InventoryMoveInpu
       items.push({
         ownedCardId: source.id,
         catalogCardId: source.catalogCardId,
-        printingId: source.printingId,
+        setCode: source.setCode,
+        rarity: source.rarity,
         fromCollectionId: source.collectionId,
         toCollectionId: input.toCollectionId,
         quantity,
@@ -839,12 +886,11 @@ export function listOwnedCards(db: Db, userId: string, options: InventoryListOpt
       note: ownedCard.note,
       createdAt: ownedCard.createdAt,
       updatedAt: ownedCard.updatedAt,
-      // The stack's printing (ADR 0034), `null` = printing unknown.
-      printingId: ownedCard.printingId,
-      printingSetCode: catalogPrinting.setCode,
-      printingRarity: catalogPrinting.rarity,
-      printingRarityCode: catalogPrinting.rarityCode,
-      printingSetName: catalogSet.name,
+      // The stack's set code and rarity key (ADR 0034), `null` = unknown,
+      // and the name of the set the code belongs to.
+      setCode: ownedCard.setCode,
+      rarity: ownedCard.rarity,
+      setName: ownedSetNameSql(),
       cardName: catalogCard.name,
       cardNameDe: cardNameDeSql(),
       cardType: catalogCard.type,
@@ -858,8 +904,6 @@ export function listOwnedCards(db: Db, userId: string, options: InventoryListOpt
     })
     .from(ownedCard)
     .innerJoin(catalogCard, eq(ownedCard.catalogCardId, catalogCard.id))
-    .leftJoin(catalogPrinting, eq(ownedCard.printingId, catalogPrinting.id))
-    .leftJoin(catalogSet, eq(catalogPrinting.setId, catalogSet.id))
     .where(where)
     .orderBy(desc(ownedCard.updatedAt))
     .limit(pageSize)

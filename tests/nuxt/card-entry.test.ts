@@ -164,7 +164,7 @@ describe('suggestCatalogMatches', () => {
       score: 1,
     })
     expect(best!.imageSmall).toContain(String(CATALOG_FIXTURE_IDS.darkMagician))
-    expect(best).not.toHaveProperty('printings')
+    expect(best).not.toHaveProperty('printing')
     expect(rest.every(candidate => candidate.score <= best!.score)).toBe(true)
   })
 
@@ -201,26 +201,18 @@ describe('suggestCatalogMatches', () => {
     })
   })
 
-  it('returns the card\'s printings under the set code, one per rarity (ADR 0034)', () => {
+  it('returns the set code with the rarities listed under it (ADR 0034)', () => {
     const [single] = suggestCatalogMatches(db, parseEntryLine('sdy-006'))
-    expect(single!.printings).toEqual([{
-      id: `${CATALOG_FIXTURE_IDS.darkMagician}|SDY-006|UR`,
-      setCode: 'SDY-006',
-      setName: 'Starter Deck: Yugi',
-      rarity: 'Ultra Rare',
-      rarityCode: 'UR',
-    }])
+    expect(single!.printing).toEqual({ setCode: 'SDY-006', setName: 'Starter Deck: Yugi', rarities: ['ur'] })
 
-    // LC01-EN004 comes in two rarities, one without a rarity code.
+    // LC01-EN004 comes in two rarities; YGOPRODeck has no rarity code for the
+    // Quarter Century Secret Rare, its name still maps.
     const [several] = suggestCatalogMatches(db, parseEntryLine('Blue-Eyes White Dragon (LC01-EN004)'))
     expect(several).toMatchObject({ cardId: CATALOG_FIXTURE_IDS.blueEyesWhiteDragon, matchedBy: 'set_code' })
-    expect(several!.printings!.map(printing => [printing.rarity, printing.rarityCode, printing.setName])).toEqual([
-      ['Ultra Rare', 'UR', 'Legendary Collection'],
-      ['Quarter Century Secret Rare', null, 'Legendary Collection: 25th Anniversary Edition'],
-    ])
+    expect(several!.printing).toMatchObject({ setCode: 'LC01-EN004', rarities: ['ur', 'qcscr'] })
 
     // Without a set code there is nothing to preselect.
-    expect(suggestCatalogMatches(db, parseEntryLine('Dark Magician'))[0]).not.toHaveProperty('printings')
+    expect(suggestCatalogMatches(db, parseEntryLine('Dark Magician'))[0]).not.toHaveProperty('printing')
   })
 
   it('keeps both cards when the set code contradicts the name', () => {

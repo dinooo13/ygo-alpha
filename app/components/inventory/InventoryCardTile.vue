@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { breakdownKey, breakdownLabel } from '~/utils/inventory-search-result'
 import { cardFrame } from '~~/shared/card-frame'
-import { printingShortLabel } from '~~/shared/printing'
+import { printingLabel } from '~~/shared/printing'
 import type { InventorySearchResultItem } from '~/utils/inventory-search-result'
 
 const props = defineProps<{
@@ -19,9 +19,9 @@ const { cardName, cardValue } = useCardText()
 
 const frame = computed(() => cardFrame(props.item))
 
-// The known printings (ADR 0034) as one line: "LOB-001 (UR) ×2 · SDY-006 (UR) ×1".
+// The known printings (ADR 0034) as one line: "LOB-001 (UR) ×2 · LC01-EN004 (QCScR) ×1".
 const printingLine = computed(() => (props.item.printingBreakdown ?? [])
-  .map(entry => t('inventory.breakdown.entry', { name: printingShortLabel(entry), count: n(entry.quantity, 'integer') }))
+  .map(entry => t('inventory.breakdown.entry', { name: printingLabel(entry) ?? '', count: n(entry.quantity, 'integer') }))
   .join(' · '))
 </script>
 

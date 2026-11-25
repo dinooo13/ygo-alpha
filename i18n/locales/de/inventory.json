@@ -70,8 +70,7 @@
       "loadFailed": "Deine Kopien konnten nicht geladen werden.",
       "saveFailed": "Die Änderung konnte nicht gespeichert werden.",
       "merged": "Mit den Kopien in {collection} zusammengelegt.",
-      "status": "{collection}: {count} Kopie | {collection}: {count} Kopien",
-      "printing": "Printing ändern ({collection})"
+      "status": "{collection}: {count} Kopie | {collection}: {count} Kopien"
     },
     "picker": {
       "title": "Karte aus dem Katalog wählen",
@@ -120,8 +119,29 @@
     "printing": {
       "label": "Printings",
       "unknown": "Printing unbekannt",
-      "search": "Set-Code, Seltenheit oder Set suchen...",
-      "hint": "Set-Code und Seltenheit deiner Kopien. Ohne Angabe bleibt das Printing unbekannt."
+      "search": "Set-Code oder Set suchen...",
+      "hint": "Set-Code und Seltenheit deiner Kopien, beides optional.",
+      "unknownSetCode": "Set-Code unbekannt",
+      "setCodeFor": "Set-Code: {label}",
+      "rarityFor": "Seltenheit: {label}"
+    },
+    "rarity": {
+      "unknown": "Seltenheit unbekannt",
+      "other": "Andere Seltenheit…",
+      "search": "Seltenheit suchen...",
+      "group": {
+        "nonFoil": "Ohne Folie",
+        "foil": "Folie",
+        "secret": "Secret",
+        "precious": "Gold und Platin",
+        "millennium": "Millennium",
+        "parallel": "Parallel",
+        "duelTerminal": "Duel Terminal",
+        "kaiba": "Kaiba Corporation",
+        "rush": "Rush Duel",
+        "colorful": "Farbvarianten",
+        "other": "Weitere"
+      }
     }
   }
 }

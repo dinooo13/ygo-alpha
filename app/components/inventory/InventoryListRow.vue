@@ -15,7 +15,7 @@
  */
 import { CARD_TEXT_EXCERPT_LENGTH } from '~~/shared/inventory'
 import { cardFrame } from '~~/shared/card-frame'
-import { printingShortLabel } from '~~/shared/printing'
+import { printingLabel as stackPrintingLabel } from '~~/shared/printing'
 
 interface InventoryListItem {
   id: string
@@ -33,11 +33,11 @@ interface InventoryListItem {
   /** YGOPRODeck no longer lists the card (ADR 0019). */
   cardRetired?: boolean
   imageUrlSmall: string | null
-  /** The stack's printing (ADR 0034); `null` = printing unknown. */
-  printingSetCode?: string | null
-  printingRarity?: string | null
-  printingRarityCode?: string | null
-  printingSetName?: string | null
+  /** The stack's set code and rarity key (ADR 0034); `null` = unknown. */
+  setCode?: string | null
+  rarity?: string | null
+  /** The name of the set the set code belongs to. */
+  setName?: string | null
 }
 
 const props = defineProps<{
@@ -62,9 +62,7 @@ const { cardName, cardDesc } = useCardText()
 const frame = computed(() => cardFrame({ type: props.item.cardType }))
 const displayName = computed(() => cardName({ name: props.item.cardName, nameDe: props.item.cardNameDe }))
 const metaId = useId()
-const printingLabel = computed(() => props.item.printingSetCode
-  ? printingShortLabel({ setCode: props.item.printingSetCode, rarity: props.item.printingRarity, rarityCode: props.item.printingRarityCode })
-  : null)
+const printingLabel = computed(() => stackPrintingLabel({ setCode: props.item.setCode ?? null, rarity: props.item.rarity ?? null }))
 
 // One flowing line of text: the card's line breaks (some stored as "\r\n",
 // which the HTML parser would turn into "\n" and so break hydration) become
@@ -126,7 +124,7 @@ const excerpt = computed(() => {
           <span
             v-if="printingLabel"
             class="inline-flex min-w-0 items-center gap-1 text-[0.6875rem] text-muted"
-            :title="item.printingSetName ?? undefined"
+            :title="item.setName ?? undefined"
             data-testid="row-printing"
           >
             <UIcon

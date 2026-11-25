@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { getQuery } from 'h3'
 import { useDb } from '../../../db'
-import { catalogCard, catalogPrinting, collection, ownedCard } from '../../../db/schema'
+import { catalogCard, collection, ownedCard } from '../../../db/schema'
 import { assertCollectionOwnedByUser } from '../../../utils/collections'
 import {
   buildInventorySearchWhere,
@@ -91,28 +91,30 @@ export default defineEventHandler(async (event) => {
     .groupBy(ownedCard.catalogCardId, ownedCard.collectionId)
     .all()
 
-  // The printings behind each tile (ADR 0034): known printings only, with
-  // the copies under the same `where`, so they add up within the total.
+  // The printings behind each tile (ADR 0034): the stacks with a known set
+  // code or rarity, with the copies under the same `where`, so they add up
+  // within the total.
   const printingRows = db
     .select({
       catalogCardId: ownedCard.catalogCardId,
-      printingId: ownedCard.printingId,
-      setCode: catalogPrinting.setCode,
-      rarity: catalogPrinting.rarity,
-      rarityCode: catalogPrinting.rarityCode,
+      setCode: ownedCard.setCode,
+      rarity: ownedCard.rarity,
       quantity: sql<number>`sum(${ownedCard.quantity})`,
     })
     .from(ownedCard)
     .innerJoin(catalogCard, eq(ownedCard.catalogCardId, catalogCard.id))
-    .innerJoin(catalogPrinting, eq(ownedCard.printingId, catalogPrinting.id))
-    .where(and(where, inArray(ownedCard.catalogCardId, catalogCardIds)))
-    .groupBy(ownedCard.catalogCardId, ownedCard.printingId)
-    .orderBy(asc(catalogPrinting.setCode))
+    .where(and(
+      where,
+      inArray(ownedCard.catalogCardId, catalogCardIds),
+      or(isNotNull(ownedCard.setCode), isNotNull(ownedCard.rarity)),
+    ))
+    .groupBy(ownedCard.catalogCardId, ownedCard.setCode, ownedCard.rarity)
+    .orderBy(sql`${ownedCard.setCode} IS NULL`, asc(ownedCard.setCode), asc(ownedCard.rarity))
     .all()
-  const printingsByCardId = new Map<number, Array<{ printingId: string, setCode: string, rarity: string | null, rarityCode: string | null, quantity: number }>>()
-  for (const { catalogCardId, printingId, ...printing } of printingRows) {
+  const printingsByCardId = new Map<number, Array<{ setCode: string | null, rarity: string | null, quantity: number }>>()
+  for (const { catalogCardId, ...printing } of printingRows) {
     const list = printingsByCardId.get(catalogCardId) ?? []
-    list.push({ printingId: printingId!, ...printing })
+    list.push(printing)
     printingsByCardId.set(catalogCardId, list)
   }
 

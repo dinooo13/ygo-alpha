@@ -75,7 +75,8 @@
       "assistant_model_unavailable": "The selected AI model isn't enabled or available at the provider. Pick another model or check the provider setup.",
       "move_same_collection": "These cards are already in this collection.",
       "move_quantity_exceeds": "There aren't that many copies left (at most {max}).",
-      "printing_not_found": "This printing does not belong to the card."
+      "set_code_not_found": "This card has no such set code.",
+      "rarity_not_found": "We don't know this rarity."
     }
   }
 }

@@ -1,10 +1,11 @@
 import { useDb } from '../../../../db'
-import { listCardPrintings } from '../../../../utils/catalog-search'
+import { listCardSetCodes } from '../../../../utils/catalog-search'
 import { requireUser } from '../../../../utils/session'
 
 /**
- * The printings of a card (ADR 0034: set code + rarity, with the set name),
- * for the inventory's printing picker. An unknown card has none.
+ * The set codes of a card with the set name and the rarities YGOPRODeck
+ * lists for each (ADR 0034), for the inventory's printing pickers. An
+ * unknown card has none.
  */
 export default defineEventHandler(async (event) => {
   await requireUser(event)
@@ -14,5 +15,5 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Card not found' })
   }
 
-  return { items: listCardPrintings(useDb(), id) }
+  return { items: listCardSetCodes(useDb(), id) }
 })

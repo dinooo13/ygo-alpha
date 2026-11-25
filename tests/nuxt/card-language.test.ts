@@ -219,7 +219,7 @@ describe('owner and shared views with German names', () => {
 
   it('adds the German name to inventory rows, wishlist rows and shared lists, sorted in German', () => {
     for (const catalogCardId of [ID.monsterReborn, ID.darkMagician, ID.raigeki]) {
-      addOwnedCard(db, 'user-a', { catalogCardId, collectionId: null, printingId: null, quantity: 1, note: null })
+      addOwnedCard(db, 'user-a', { catalogCardId, collectionId: null, setCode: null, rarity: null, quantity: 1, note: null })
       addWishlistItem(db, 'user-a', { catalogCardId, quantity: 1, note: null })
     }
 

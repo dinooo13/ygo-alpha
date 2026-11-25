@@ -6,7 +6,7 @@ Accepted
 
 Extended by [0019](0019-retired-catalog-cards.md): the sync now retires cards YGOPRODeck no longer lists and re-points references to their replacement.
 
-The `catalog_printing` key is superseded by [0034](0034-inventory-printings.md): a printing is keyed by card, set code and rarity (`<card id>|<set code>|<rarity>`), since one set code comes in several rarities.
+The `catalog_printing` key is superseded by [0034](0034-inventory-printings.md): a printing is keyed by card, set code and rarity (`<card id>|<set code>|<rarity>`), since one set code comes in several rarities, and its rarity is mapped onto a fixed rarity list (`rarity_key`).
 
 The session gate on `POST /api/admin/catalog/sync` is superseded by [0027](0027-invite-code-and-admin-token.md): the endpoint needs an admin bearer token.
 

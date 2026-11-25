@@ -4,7 +4,6 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CATALOG_FIXTURE_IDS, seedCatalogFixture } from '../../server/db/fixtures/catalog-fixture'
 import * as schema from '../../server/db/schema'
-import { printingKey } from '../../shared/printing'
 import {
   INVENTORY_MOVE_MAX_ITEMS,
   addOwnedCard,
@@ -225,21 +224,21 @@ describe('moveOwnedCards', () => {
 
 describe('moveOwnedCards with printings (ADR 0034)', () => {
   let db: TestDb
-  const SDY = printingKey({ cardId: darkMagician, setCode: 'SDY-006', rarityCode: 'UR' })
-  const LOB = printingKey({ cardId: darkMagician, setCode: 'LOB-005', rarityCode: 'UR' })
+  const SDY = 'SDY-006'
+  const LOB = 'LOB-005'
 
   beforeEach(() => {
     db = createTestDb()
     seed(db)
   })
 
-  function ownPrinting(quantity: number, printingId: string | null, collectionId: string | null = null) {
-    return addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: darkMagician, quantity, collection_id: collectionId, printingId }))
+  function ownPrinting(quantity: number, setCode: string | null, collectionId: string | null = null) {
+    return addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: darkMagician, quantity, collection_id: collectionId, setCode, rarity: setCode ? 'ur' : null }))
   }
 
   function printingStacks() {
     return db.select().from(schema.ownedCard).all()
-      .map(row => `${row.collectionId ?? '-'}/${row.printingId ?? '?'}=${row.quantity}`)
+      .map(row => `${row.collectionId ?? '-'}/${row.setCode ?? '?'}=${row.quantity}`)
       .sort()
   }
 
@@ -251,7 +250,7 @@ describe('moveOwnedCards with printings (ADR 0034)', () => {
 
     const result = move(db, 'user-a', [{ ownedCardId: source.id, quantity: 2, toCollectionId: 'box-1' }])
 
-    expect(result.items).toEqual([expect.objectContaining({ printingId: SDY, quantity: 2, remaining: 3 })])
+    expect(result.items).toEqual([expect.objectContaining({ setCode: SDY, rarity: 'ur', quantity: 2, remaining: 3 })])
     expect(printingStacks()).toEqual([`-/${SDY}=3`, 'box-1/?=4', `box-1/${LOB}=2`, `box-1/${SDY}=3`].sort())
   })
 

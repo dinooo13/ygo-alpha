@@ -27,13 +27,13 @@ function createTestDb() {
 
 type TestDb = ReturnType<typeof createTestDb>
 
-// Still unused since ADR 0017; the printing is back (ADR 0034).
+// Still unused since ADR 0017 (ADR 0034 brings back set code and rarity).
 const COLLECTOR_KEYS = ['language', 'condition', 'edition']
 
 // Printings keyed like the sync keys them (`printingKey`, ADR 0034).
-const LOB_005 = '46986414|LOB-005|UR'
-const SDY_006 = '46986414|SDY-006|UR'
-const LOB_119 = '55144522|LOB-119|R'
+const LOB_005 = '46986414|LOB-005|ur'
+const SDY_006 = '46986414|SDY-006|ur'
+const LOB_119 = '55144522|LOB-119|r'
 
 function seedCatalog(db: TestDb) {
   const now = new Date()
@@ -83,9 +83,9 @@ function seedCatalog(db: TestDb) {
   db.insert(schema.catalogSet).values({ id: 'starter-deck-yugi', name: 'Starter Deck: Yugi' }).run()
 
   db.insert(schema.catalogPrinting).values([
-    { id: LOB_005, cardId: 46986414, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-005', rarity: 'Ultra Rare', rarityCode: 'UR' },
-    { id: SDY_006, cardId: 46986414, setId: 'starter-deck-yugi', setCode: 'SDY-006', rarity: 'Ultra Rare', rarityCode: 'UR' },
-    { id: LOB_119, cardId: 55144522, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-119', rarity: 'Rare', rarityCode: 'R' },
+    { id: LOB_005, cardId: 46986414, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-005', rarity: 'Ultra Rare', rarityKey: 'ur' },
+    { id: SDY_006, cardId: 46986414, setId: 'starter-deck-yugi', setCode: 'SDY-006', rarity: 'Ultra Rare', rarityKey: 'ur' },
+    { id: LOB_119, cardId: 55144522, setId: 'legend-of-blue-eyes-white-dragon', setCode: 'LOB-119', rarity: 'Rare', rarityKey: 'r' },
   ]).run()
 
   db.insert(schema.catalogCardImage).values({
@@ -102,30 +102,34 @@ describe('inventory validation', () => {
     expect(validateInventoryInput({ catalog_card_id: '46986414' })).toEqual({
       catalogCardId: 46986414,
       collectionId: null,
-      printingId: null,
+      setCode: null,
+      rarity: null,
       quantity: 1,
       note: null,
     })
   })
 
-  it('reads the printing and ignores language, condition and edition (ADR 0017, ADR 0034)', () => {
+  it('reads set code and rarity and ignores language, condition and edition (ADR 0017, ADR 0034)', () => {
     const input = validateInventoryInput({
       catalog_card_id: 46986414,
-      printingId: ` ${LOB_005} `,
+      setCode: ' LOB-005 ',
+      rarity: 'ur',
       language: 'xx',
       condition: 'played',
       edition: 'first',
       quantity: 2,
     })
-    expect(input).toEqual({ catalogCardId: 46986414, collectionId: null, printingId: LOB_005, quantity: 2, note: null })
-    expect(validateInventoryInput({ catalog_card_id: 46986414, printing_id: LOB_005 }).printingId).toBe(LOB_005)
-    expect(validateInventoryInput({ catalog_card_id: 46986414, printing_id: '' }).printingId).toBeNull()
+    expect(input).toEqual({ catalogCardId: 46986414, collectionId: null, setCode: 'LOB-005', rarity: 'ur', quantity: 2, note: null })
+    expect(validateInventoryInput({ catalog_card_id: 46986414, set_code: 'LOB-005' }).setCode).toBe('LOB-005')
+    expect(validateInventoryInput({ catalog_card_id: 46986414, set_code: '', rarity: '' })).toMatchObject({ setCode: null, rarity: null })
+    // The old `printing_id` is ignored.
+    expect(validateInventoryInput({ catalog_card_id: 46986414, printing_id: LOB_005 })).toMatchObject({ setCode: null, rarity: null })
 
-    const patch = validateInventoryUpdateInput({ printing_id: LOB_005, language: 'de', condition: 'played', edition: 'first', quantity: 3 })
-    expect(patch).toEqual({ quantity: 3, printingId: LOB_005 })
-    // `null` clears the printing; leaving it out keeps it.
-    expect(validateInventoryUpdateInput({ printingId: null })).toEqual({ printingId: null })
-    expect(validateInventoryUpdateInput({ quantity: 2 })).not.toHaveProperty('printingId')
+    const patch = validateInventoryUpdateInput({ set_code: 'LOB-005', language: 'de', condition: 'played', edition: 'first', quantity: 3 })
+    expect(patch).toEqual({ quantity: 3, setCode: 'LOB-005' })
+    // `null` clears; leaving it out keeps it.
+    expect(validateInventoryUpdateInput({ setCode: null, rarity: null })).toEqual({ setCode: null, rarity: null })
+    expect(validateInventoryUpdateInput({ quantity: 2 })).toEqual({ quantity: 2 })
   })
 
   it('rejects invalid quantity and a missing card id', () => {
@@ -191,71 +195,87 @@ describe('inventory persistence helpers', () => {
     seedCatalog(db)
   })
 
-  it('adds and upserts owned cards by card, collection and printing (ADR 0034)', async () => {
+  it('adds and upserts owned cards by card, collection, set code and rarity (ADR 0034)', async () => {
     const first = await addOwnedCard(db, 'user-a', validateInventoryInput({
       catalog_card_id: 46986414,
-      printing_id: LOB_005,
+      set_code: 'LOB-005',
+      rarity: 'ur',
       quantity: 1,
       language: 'en',
     }))
-    // The same printing merges; language and edition still don't matter (ADR 0017).
+    // The same printing merges (the set code in any case); language and
+    // edition still don't matter (ADR 0017).
     const updated = await addOwnedCard(db, 'user-a', validateInventoryInput({
       catalog_card_id: 46986414,
-      printingId: LOB_005,
+      setCode: 'lob-005',
+      rarity: 'ur',
       quantity: 2,
       language: 'de',
       edition: 'first',
     }))
-    // Another printing and "printing unknown" are stacks of their own.
-    const other = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: SDY_006 }))
+    // Another set code, another rarity, and "unknown" are stacks of their own.
+    const other = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'SDY-006', rarity: 'ur' }))
+    const otherRarity = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'LOB-005', rarity: 'scr' }))
+    const setCodeOnly = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'LOB-005' }))
     const unknown = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, quantity: 4 }))
     const unknownAgain = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414 }))
 
     const rows = db.select().from(schema.ownedCard).all()
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(5)
     expect(updated.id).toBe(first.id)
-    expect(updated).toMatchObject({ quantity: 3, printingId: LOB_005 })
-    expect(other).toMatchObject({ quantity: 1, printingId: SDY_006 })
+    expect(updated).toMatchObject({ quantity: 3, setCode: 'LOB-005', rarity: 'ur' })
+    expect(other).toMatchObject({ quantity: 1, setCode: 'SDY-006', rarity: 'ur' })
+    // A rarity YGOPRODeck does not list for LOB-005 is the user's call.
+    expect(otherRarity).toMatchObject({ quantity: 1, setCode: 'LOB-005', rarity: 'scr' })
+    expect(setCodeOnly).toMatchObject({ quantity: 1, setCode: 'LOB-005', rarity: null })
     expect(unknownAgain.id).toBe(unknown.id)
-    expect(unknownAgain).toMatchObject({ quantity: 5, printingId: null })
-    expect(rows.find(row => row.id === first.id)).toMatchObject({ language: 'en', condition: 'near_mint', edition: 'unlimited' })
+    expect(unknownAgain).toMatchObject({ quantity: 5, setCode: null, rarity: null })
+    expect(rows.find(row => row.id === first.id)).toMatchObject({ language: 'en', condition: 'near_mint', edition: 'unlimited', printingId: null })
   })
 
-  it('rejects a printing of another card or an unknown printing (ADR 0034)', async () => {
-    for (const printingId of [LOB_119, 'LOB-005', 'NOPE-001']) {
-      await expect(addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId })))
-        .rejects.toMatchObject({ statusCode: 400, data: { code: 'printing_not_found' } })
+  it('rejects a set code of another card and an unknown rarity (ADR 0034)', async () => {
+    for (const setCode of ['LOB-119', 'NOPE-001', LOB_005]) {
+      await expect(addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode })))
+        .rejects.toMatchObject({ statusCode: 400, data: { code: 'set_code_not_found' } })
+    }
+    for (const rarity of ['Ultra Rare', 'UR', 'nope']) {
+      await expect(addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, rarity })))
+        .rejects.toMatchObject({ statusCode: 400, data: { code: 'rarity_not_found' } })
     }
     expect(db.select().from(schema.ownedCard).all()).toHaveLength(0)
   })
 
   it('edits the printing: a new tuple re-points, an existing one merges (ADR 0034)', async () => {
-    const known = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: LOB_005, quantity: 2, note: 'Binder' }))
+    const known = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'LOB-005', rarity: 'ur', quantity: 2, note: 'Binder' }))
     const unknown = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, quantity: 3, note: 'Trade' }))
 
-    const repointed = await updateOwnedCard(db, 'user-a', known.id, validateInventoryUpdateInput({ printingId: SDY_006 }))
-    expect(repointed).toMatchObject({ id: known.id, printingId: SDY_006, quantity: 2 })
+    const repointed = await updateOwnedCard(db, 'user-a', known.id, validateInventoryUpdateInput({ setCode: 'SDY-006', rarity: 'ur' }))
+    expect(repointed).toMatchObject({ id: known.id, setCode: 'SDY-006', rarity: 'ur', quantity: 2 })
 
-    // Setting the unknown stack to SDY-006 merges it into the stack above.
-    const merged = await updateOwnedCard(db, 'user-a', unknown.id, validateInventoryUpdateInput({ printingId: SDY_006 }))
-    expect(merged).toMatchObject({ id: known.id, printingId: SDY_006, quantity: 5, note: 'Binder\nTrade' })
+    // Setting the unknown stack to SDY-006 (UR) merges it into the stack above.
+    const merged = await updateOwnedCard(db, 'user-a', unknown.id, validateInventoryUpdateInput({ setCode: 'SDY-006', rarity: 'ur' }))
+    expect(merged).toMatchObject({ id: known.id, setCode: 'SDY-006', rarity: 'ur', quantity: 5, note: 'Binder\nTrade' })
     expect(db.select().from(schema.ownedCard).all()).toHaveLength(1)
 
-    // Clearing it gives "printing unknown" again; a foreign printing is refused.
-    expect(await updateOwnedCard(db, 'user-a', known.id, validateInventoryUpdateInput({ printingId: null }))).toMatchObject({ printingId: null })
-    await expect(updateOwnedCard(db, 'user-a', known.id, validateInventoryUpdateInput({ printingId: LOB_119 })))
-      .rejects.toMatchObject({ statusCode: 400, data: { code: 'printing_not_found' } })
+    // Each part changes on its own; clearing gives "unknown" again; a
+    // foreign set code or an unknown rarity is refused.
+    expect(await updateOwnedCard(db, 'user-a', known.id, validateInventoryUpdateInput({ rarity: 'qcscr' }))).toMatchObject({ setCode: 'SDY-006', rarity: 'qcscr' })
+    expect(await updateOwnedCard(db, 'user-a', known.id, validateInventoryUpdateInput({ setCode: null }))).toMatchObject({ setCode: null, rarity: 'qcscr' })
+    await expect(updateOwnedCard(db, 'user-a', known.id, validateInventoryUpdateInput({ setCode: 'LOB-119' })))
+      .rejects.toMatchObject({ statusCode: 400, data: { code: 'set_code_not_found' } })
+    await expect(updateOwnedCard(db, 'user-a', known.id, validateInventoryUpdateInput({ rarity: 'Ultra Rare' })))
+      .rejects.toMatchObject({ statusCode: 400, data: { code: 'rarity_not_found' } })
   })
 
-  it('keeps the printing on other edits and drops it when the card changes', async () => {
-    const created = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: LOB_005 }))
+  it('keeps the printing on other edits; a new card drops the set code but keeps the rarity', async () => {
+    const created = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'LOB-005', rarity: 'ur' }))
 
     expect(await updateOwnedCard(db, 'user-a', created.id, validateInventoryUpdateInput({ quantity: 4, note: 'Binder' })))
-      .toMatchObject({ printingId: LOB_005, quantity: 4 })
+      .toMatchObject({ setCode: 'LOB-005', rarity: 'ur', quantity: 4 })
     expect(await updateOwnedCard(db, 'user-a', created.id, validateInventoryUpdateInput({ catalogCardId: 55144522 })))
-      .toMatchObject({ catalogCardId: 55144522, printingId: null })
-    expect(await updateOwnedCard(db, 'user-a', created.id, validateInventoryUpdateInput({ catalogCardId: 46986414, printingId: SDY_006 })))
-      .toMatchObject({ catalogCardId: 46986414, printingId: SDY_006 })
+      .toMatchObject({ catalogCardId: 55144522, setCode: null, rarity: 'ur' })
+    expect(await updateOwnedCard(db, 'user-a', created.id, validateInventoryUpdateInput({ catalogCardId: 46986414, setCode: 'SDY-006' })))
+      .toMatchObject({ catalogCardId: 46986414, setCode: 'SDY-006', rarity: 'ur' })
   })
 
   it('returns owned cards with the printing but without the other collector columns', async () => {
@@ -266,7 +286,8 @@ describe('inventory persistence helpers', () => {
       for (const key of COLLECTOR_KEYS) {
         expect(row).not.toHaveProperty(key)
       }
-      expect(row).toMatchObject({ catalogCardId: 46986414, note: 'Binder', printingId: null })
+      expect(row).toMatchObject({ catalogCardId: 46986414, note: 'Binder', setCode: null, rarity: null })
+      expect(row).not.toHaveProperty('printingId')
     }
     expect(patched.quantity).toBe(4)
   })
@@ -297,34 +318,33 @@ describe('inventory persistence helpers', () => {
       quantity: 2,
       note: 'Binder',
     })
-    for (const key of [...COLLECTOR_KEYS, 'setName', 'rarity']) {
+    for (const key of COLLECTOR_KEYS) {
       expect(result.items[0]).not.toHaveProperty(key)
     }
     expect(result.items[0]).toMatchObject({ cardRetired: false })
     expect(result.items[0]).not.toHaveProperty('cardRetiredAt')
-    expect(result.items[0]).toMatchObject({ printingId: null, printingSetCode: null, printingRarityCode: null, printingSetName: null })
+    expect(result.items[0]).toMatchObject({ setCode: null, rarity: null, setName: null })
   })
 
   it('lists each stack\'s printing and filters by set or "printing unknown" (ADR 0034)', async () => {
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: LOB_005, quantity: 2 }))
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: SDY_006 }))
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 55144522, printingId: LOB_119 }))
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 55144522, quantity: 3 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'LOB-005', rarity: 'ur', quantity: 2 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'SDY-006' }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 55144522, setCode: 'LOB-119', rarity: 'r' }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 55144522, rarity: 'scr', quantity: 3 }))
 
     const all = listOwnedCards(db, 'user-a')
     expect(all.total).toBe(4)
-    expect(all.items.find(item => item.printingId === LOB_005)).toMatchObject({
-      printingSetCode: 'LOB-005',
-      printingRarity: 'Ultra Rare',
-      printingRarityCode: 'UR',
-      printingSetName: 'Legend of Blue Eyes White Dragon',
+    expect(all.items.find(item => item.setCode === 'LOB-005')).toMatchObject({
+      rarity: 'ur',
+      setName: 'Legend of Blue Eyes White Dragon',
     })
+    expect(all.items.find(item => item.setCode === null)).toMatchObject({ rarity: 'scr', setName: null })
 
-    const printings = (options: Parameters<typeof listOwnedCards>[2]) =>
-      listOwnedCards(db, 'user-a', options).items.map(item => item.printingId ?? '-').sort()
-    expect(printings(parseInventoryListQuery({ set: 'legend-of-blue-eyes-white-dragon' }))).toEqual([LOB_005, LOB_119])
-    expect(printings(parseInventoryListQuery({ set: '__unknown__' }))).toEqual(['-'])
-    expect(printings(parseInventoryListQuery({ set: 'starter-deck-yugi,__unknown__' }))).toEqual(['-', SDY_006])
+    const setCodes = (options: Parameters<typeof listOwnedCards>[2]) =>
+      listOwnedCards(db, 'user-a', options).items.map(item => item.setCode ?? '-').sort()
+    expect(setCodes(parseInventoryListQuery({ set: 'legend-of-blue-eyes-white-dragon' }))).toEqual(['LOB-005', 'LOB-119'])
+    expect(setCodes(parseInventoryListQuery({ set: '__unknown__' }))).toEqual(['-'])
+    expect(setCodes(parseInventoryListQuery({ set: 'starter-deck-yugi,__unknown__' }))).toEqual(['-', 'SDY-006'])
     expect(listOwnedCards(db, 'user-a', parseInventoryListQuery({ set: 'starter-deck-yugi' })).total).toBe(1)
   })
 

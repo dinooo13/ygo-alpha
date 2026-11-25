@@ -34,8 +34,10 @@ export interface CatalogCardDetail {
     id?: string
     setCode: string
     setName: string
+    /** YGOPRODeck's rarity text. */
     rarity: string | null
-    rarityCode?: string | null
+    /** The rarity key it maps to (ADR 0034); older fixtures may lack it. */
+    rarityKey?: string | null
     price: string | null
   }>
   images: Array<{

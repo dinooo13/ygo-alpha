@@ -1,6 +1,7 @@
-// Printings in the inventory UI (#176, ADR 0034): the optional picker in
-// "Karte hinzufügen", the printing on "Liste" rows and "Galerie" tiles, and
-// the "Set / Printing" filter.
+// Printings in the inventory UI (#176, ADR 0034): set code and rarity in
+// "Karte hinzufügen" (the rarity suggesting what YGOPRODeck lists, "Andere
+// Seltenheit…" opening the full list), the printing on "Liste" rows and
+// "Galerie" tiles, and the "Set / Printing" filter.
 
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { enableAutoUnmount, flushPromises, type VueWrapper } from '@vue/test-utils'
@@ -10,14 +11,15 @@ import AddToInventoryModal from '~/components/inventory/AddToInventoryModal.vue'
 import InventoryCardTile from '~/components/inventory/InventoryCardTile.vue'
 import InventoryListRow from '~/components/inventory/InventoryListRow.vue'
 import InventorySearchPanel from '~/components/inventory/InventorySearchPanel.vue'
+import RaritySelect from '~/components/inventory/RaritySelect.vue'
 import type { InventorySearchFilters } from '~/components/inventory/InventorySearchPanel.vue'
+import { RARITIES } from '~~/shared/rarity'
 import { setTestLocale } from './fixtures/locale'
 
-const LOB = '46986414|LOB-005|UR'
-const SDY = '46986414|SDY-006|UR'
-const printings = [
-  { id: LOB, setCode: 'LOB-005', setName: 'Legend of Blue Eyes White Dragon', rarity: 'Ultra Rare', rarityCode: 'UR' },
-  { id: SDY, setCode: 'SDY-006', setName: 'Starter Deck: Yugi', rarity: 'Ultra Rare', rarityCode: 'UR' },
+const setCodes = [
+  { setCode: 'LC01-EN004', setName: 'Legendary Collection', rarities: ['ur', 'qcscr'] },
+  { setCode: 'LOB-001', setName: 'Legend of Blue Eyes White Dragon', rarities: ['ur'] },
+  { setCode: 'SDK-001', setName: 'Starter Deck: Kaiba', rarities: [] },
 ]
 
 afterEach(async () => {
@@ -35,18 +37,25 @@ interface PropsWrapper {
   props: (key: string) => unknown
   vm: { $emit: (event: string, ...args: unknown[]) => void }
   findComponent: (selector: { name: string }) => PropsWrapper
+  findAllComponents: (selector: { name: string }) => PropsWrapper[]
 }
 
-function printingSelect(component: VueWrapper): PropsWrapper {
-  return component.findComponent({ name: 'InventoryPrintingSelect' }) as unknown as PropsWrapper
+function named(component: VueWrapper | PropsWrapper, name: string): PropsWrapper {
+  return component.findComponent({ name }) as unknown as PropsWrapper
+}
+
+type MenuItem = { label: string, value?: string, type?: string }
+
+function labels(menu: PropsWrapper): string[][] {
+  return (menu.props('items') as MenuItem[][]).map(group => group.map(item => item.label))
 }
 
 describe('AddToInventoryModal printing (ADR 0034)', () => {
   async function mountModal() {
-    const fetchMock = vi.fn(async (url: string) => url.endsWith('/printings') ? { items: printings } : { id: 'stack-1' })
+    const fetchMock = vi.fn(async (url: string) => url.endsWith('/printings') ? { items: setCodes } : { id: 'stack-1' })
     vi.stubGlobal('$fetch', fetchMock)
     const component = await mountSuspended(AddToInventoryModal, {
-      props: { open: true, card: { id: 46986414, name: 'Dark Magician', type: 'Normal Monster' }, collections: [] },
+      props: { open: true, card: { id: 89631139, name: 'Blue-Eyes White Dragon', type: 'Normal Monster' }, collections: [] },
     })
     await flushPromises()
     return { component, fetchMock }
@@ -61,37 +70,102 @@ describe('AddToInventoryModal printing (ADR 0034)', () => {
     return (fetchMock.mock.calls as unknown as FetchCall[]).filter(([url, options]) => url === '/api/inventory' && options?.method === 'POST')
   }
 
-  it('offers the card\'s printings, optional, and posts "printing unknown" by default', async () => {
+  function setCodeMenu(component: VueWrapper) {
+    return named(named(component, 'InventoryPrintingSelect'), 'USelectMenu')
+  }
+
+  it('offers the card\'s set codes and posts "unknown" by default', async () => {
     const { component, fetchMock } = await mountModal()
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/catalog/cards/46986414/printings')
-    expect(document.body.textContent).toContain('Printing')
-    expect(document.body.textContent).toContain('Ohne Angabe bleibt das Printing unbekannt.')
-    const select = printingSelect(component)
-    expect(select.props('printings')).toEqual(printings)
-    expect(select.props('modelValue')).toBeNull()
-    const items = select.findComponent({ name: 'USelectMenu' }).props('items') as Array<{ label: string, description?: string, value: string }>
-    expect(items).toEqual([
-      { label: 'Printing unbekannt', value: '__unknown__' },
-      { label: 'LOB-005 · Ultra Rare (UR)', description: 'Legend of Blue Eyes White Dragon', value: LOB },
-      { label: 'SDY-006 · Ultra Rare (UR)', description: 'Starter Deck: Yugi', value: SDY },
+    expect(fetchMock).toHaveBeenCalledWith('/api/catalog/cards/89631139/printings')
+    expect(document.body.textContent).toContain('Set-Code und Seltenheit deiner Kopien, beides optional.')
+    const select = named(component, 'InventoryPrintingSelect')
+    expect(select.props('modelValue')).toEqual({ setCode: null, rarity: null })
+    expect(setCodeMenu(component).props('items')).toEqual([
+      { label: 'Set-Code unbekannt', value: '__unknown__' },
+      { label: 'LC01-EN004', description: 'Legendary Collection', value: 'LC01-EN004' },
+      { label: 'LOB-001', description: 'Legend of Blue Eyes White Dragon', value: 'LOB-001' },
+      { label: 'SDK-001', description: 'Starter Deck: Kaiba', value: 'SDK-001' },
     ])
 
     submit()
     await flushPromises()
-    expect(posts(fetchMock)[0]![1]!.body).toMatchObject({ catalog_card_id: 46986414, printing_id: null, quantity: 1 })
+    expect(posts(fetchMock)[0]![1]!.body).toMatchObject({ catalog_card_id: 89631139, set_code: null, rarity: null, quantity: 1 })
   })
 
-  it('posts the picked printing', async () => {
+  it('picks the only listed rarity with the set code and posts both', async () => {
     const { component, fetchMock } = await mountModal()
 
-    await printingSelect(component).findComponent({ name: 'USelectMenu' }).vm.$emit('update:modelValue', SDY)
+    await setCodeMenu(component).vm.$emit('update:modelValue', 'LOB-001')
     await nextTick()
-    expect(printingSelect(component).props('modelValue')).toBe(SDY)
+    expect(named(component, 'InventoryPrintingSelect').props('modelValue')).toEqual({ setCode: 'LOB-001', rarity: 'ur' })
 
     submit()
     await flushPromises()
-    expect(posts(fetchMock)[0]![1]!.body).toMatchObject({ printing_id: SDY })
+    expect(posts(fetchMock)[0]![1]!.body).toMatchObject({ set_code: 'LOB-001', rarity: 'ur' })
+  })
+
+  it('suggests the rarities of a set code with several and takes any of the full list', async () => {
+    const { component, fetchMock } = await mountModal()
+
+    await setCodeMenu(component).vm.$emit('update:modelValue', 'LC01-EN004')
+    await nextTick()
+    const rarity = named(component, 'InventoryRaritySelect')
+    expect(rarity.props('modelValue')).toBeNull()
+    expect(labels(named(rarity, 'USelectMenu'))).toEqual([
+      ['Seltenheit unbekannt', 'Ultra Rare (UR)', 'Quarter Century Secret Rare (QCScR)'],
+      ['Andere Seltenheit…'],
+    ])
+
+    await named(rarity, 'USelectMenu').vm.$emit('update:modelValue', 'scr')
+    await nextTick()
+    submit()
+    await flushPromises()
+    expect(posts(fetchMock)[0]![1]!.body).toMatchObject({ set_code: 'LC01-EN004', rarity: 'scr' })
+  })
+})
+
+describe('InventoryRaritySelect', () => {
+  async function mountSelect(props: { suggested?: string[], modelValue?: string | null } = {}) {
+    const model = { value: props.modelValue ?? null }
+    const component = await mountSuspended(RaritySelect, {
+      props: {
+        'label': 'Seltenheit',
+        'suggested': props.suggested ?? [],
+        'modelValue': model.value,
+        'onUpdate:modelValue': (value: string | null) => {
+          model.value = value
+        },
+      },
+    })
+    return { component, model, menu: () => named(component, 'USelectMenu') }
+  }
+
+  it('opens the full list, grouped, from "Andere Seltenheit…"', async () => {
+    const { menu, model } = await mountSelect({ suggested: ['ur'] })
+    expect(labels(menu())).toEqual([['Seltenheit unbekannt', 'Ultra Rare (UR)'], ['Andere Seltenheit…']])
+
+    await menu().vm.$emit('update:modelValue', '__other__')
+    await flushPromises()
+    // Nothing picked yet; the menu shows every rarity under its group.
+    expect(model.value).toBeNull()
+    const groups = menu().props('items') as MenuItem[][]
+    expect(groups[0]!.map(item => item.label)).toEqual(['Seltenheit unbekannt'])
+    expect(groups[1]![0]).toEqual({ type: 'label', label: 'Ohne Folie' })
+    expect(groups.flat().filter(item => item.value && !item.value.startsWith('__'))).toHaveLength(RARITIES.length)
+    expect(menu().props('open')).toBe(true)
+  })
+
+  it('shows the full list at once without suggestions', async () => {
+    const { menu } = await mountSelect()
+    expect((menu().props('items') as MenuItem[][]).flat().filter(item => item.value && !item.value.startsWith('__'))).toHaveLength(RARITIES.length)
+    expect(labels(menu()).flat()).not.toContain('Andere Seltenheit…')
+  })
+
+  it('keeps a picked rarity outside the suggestions visible', async () => {
+    const { menu } = await mountSelect({ suggested: ['ur'], modelValue: 'qcscr' })
+    expect(menu().props('modelValue')).toBe('qcscr')
+    expect(labels(menu()).flat()).toContain('Quarter Century Secret Rare (QCScR)')
   })
 })
 
@@ -100,40 +174,38 @@ describe('InventoryListRow printing', () => {
     id: 'stack-1',
     collectionId: null,
     quantity: 2,
-    cardName: 'Dark Magician',
+    cardName: 'Blue-Eyes White Dragon',
     cardType: 'Normal Monster',
     imageUrlSmall: null,
   }
 
-  it('shows a known printing with its set name and nothing for an unknown one', async () => {
-    const known = await mountSuspended(InventoryListRow, {
-      props: {
-        item: { ...base, printingSetCode: 'LOB-005', printingRarity: 'Ultra Rare', printingRarityCode: 'UR', printingSetName: 'Legend of Blue Eyes White Dragon' },
-        collectionLabel: '(keine Sammlung)',
-        showCollection: true,
-      },
+  async function rowPrinting(printing: Record<string, unknown>) {
+    const component = await mountSuspended(InventoryListRow, {
+      props: { item: { ...base, ...printing }, collectionLabel: '(keine Sammlung)', showCollection: true },
     })
-    const printing = known.find('[data-testid="row-printing"]')
-    expect(printing.text()).toBe('Printing: LOB-005 (UR)')
-    expect(printing.attributes('title')).toBe('Legend of Blue Eyes White Dragon')
+    return component.find('[data-testid="row-printing"]')
+  }
 
-    const unknown = await mountSuspended(InventoryListRow, {
-      props: { item: { ...base, printingSetCode: null }, collectionLabel: '(keine Sammlung)', showCollection: true },
-    })
-    expect(unknown.find('[data-testid="row-printing"]').exists()).toBe(false)
+  it('shows set code and rarity, with the set name as a tooltip, and nothing when both are unknown', async () => {
+    const known = await rowPrinting({ setCode: 'LC01-EN004', rarity: 'qcscr', setName: 'Legendary Collection' })
+    expect(known.text()).toBe('Printing: LC01-EN004 (QCScR)')
+    expect(known.attributes('title')).toBe('Legendary Collection')
+
+    expect((await rowPrinting({ setCode: null, rarity: 'ur' })).text()).toBe('Printing: Ultra Rare')
+    expect((await rowPrinting({ setCode: null, rarity: null })).exists()).toBe(false)
   })
 })
 
 describe('InventoryCardTile printings', () => {
   const tile = {
-    catalogCardId: 46986414,
-    name: 'Dark Magician',
+    catalogCardId: 89631139,
+    name: 'Blue-Eyes White Dragon',
     type: 'Normal Monster',
-    attribute: 'DARK',
-    race: 'Spellcaster',
-    level: 7,
-    atk: 2500,
-    def: 2100,
+    attribute: 'LIGHT',
+    race: 'Dragon',
+    level: 8,
+    atk: 3000,
+    def: 2500,
     imageSmall: null,
     totalQuantity: 5,
     collectionBreakdown: [{ collectionId: null, collectionName: null, quantity: 5 }],
@@ -145,14 +217,15 @@ describe('InventoryCardTile printings', () => {
         item: {
           ...tile,
           printingBreakdown: [
-            { printingId: LOB, setCode: 'LOB-005', rarity: 'Ultra Rare', rarityCode: 'UR', quantity: 2 },
-            { printingId: '46986414|LC01-EN004|Quarter Century Secret Rare', setCode: 'LC01-EN004', rarity: 'Quarter Century Secret Rare', rarityCode: null, quantity: 1 },
+            { setCode: 'LC01-EN004', rarity: 'qcscr', quantity: 2 },
+            { setCode: 'LOB-001', rarity: 'ur', quantity: 1 },
+            { setCode: null, rarity: 'scr', quantity: 1 },
           ],
         },
       },
     })
     expect(component.find('[data-testid="tile-printings"]').text())
-      .toBe('Printings: LOB-005 (UR) ×2 · LC01-EN004 Quarter Century Secret Rare ×1')
+      .toBe('Printings: LC01-EN004 (QCScR) ×2 · LOB-001 (UR) ×1 · Secret Rare ×1')
   })
 
   it('shows no printing line without known printings', async () => {
@@ -174,7 +247,7 @@ describe('InventorySearchPanel "Set / Printing"', () => {
       .find(menu => (menu.props('items') as Array<{ value: unknown }>).some(item => item.value === '__unknown__' || item.value === 'lob'))
   }
 
-  it('stays hidden until some copy has a printing', async () => {
+  it('stays hidden until some copy has a set code', async () => {
     const component = await mountSuspended(InventorySearchPanel, {
       props: { filters: filters(), facets: { ...cardFacets, sets: [], hasUnknownPrinting: true } },
     })

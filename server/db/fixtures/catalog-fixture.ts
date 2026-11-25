@@ -18,6 +18,7 @@
 // and no format ATK/DEF range matches it (#140).
 import { foldCardName } from '../../../shared/card-name-fold'
 import { printingKey } from '../../../shared/printing'
+import { normalizeRarity } from '../../../shared/rarity'
 import type { useDb } from '../index'
 import { catalogCard, catalogCardImage, catalogCardTranslation, catalogPrinting, catalogSet } from '../schema'
 
@@ -486,7 +487,8 @@ function printing(
   rarityCode: string | null,
   price: string | null,
 ): CatalogPrintingRow {
-  return { id: printingKey({ cardId, setCode, rarityCode, rarity }), cardId, setId, setCode, rarity, rarityCode, price }
+  const rarityKey = normalizeRarity(rarity) ?? normalizeRarity(rarityCode)
+  return { id: printingKey({ cardId, setCode, rarityKey, rarity }), cardId, setId, setCode, rarity, rarityKey, price }
 }
 
 export const CATALOG_FIXTURE_PRINTINGS: CatalogPrintingRow[] = [

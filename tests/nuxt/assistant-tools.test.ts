@@ -145,12 +145,12 @@ function insertRetiredCard(db: TestDb) {
 const MAIN_BELOW_MIN_1 = 'The Main Deck has 1 card; the usual minimum is 40.'
 
 // A printing of Dark Magician (ADR 0034), seeded where a test needs one.
-const DM_LOB = `${CARD.darkMagician}|LOB-005|UR`
+const DM_LOB = `${CARD.darkMagician}|LOB-005|ur`
 
 function seedDarkMagicianPrinting(db: TestDb) {
   db.insert(schema.catalogSet).values({ id: 'lob', name: 'Legend of Blue Eyes White Dragon' }).run()
   db.insert(schema.catalogPrinting).values({
-    id: DM_LOB, cardId: CARD.darkMagician, setId: 'lob', setCode: 'LOB-005', rarity: 'Ultra Rare', rarityCode: 'UR',
+    id: DM_LOB, cardId: CARD.darkMagician, setId: 'lob', setCode: 'LOB-005', rarity: 'Ultra Rare', rarityKey: 'ur',
   }).run()
 }
 
@@ -756,20 +756,30 @@ describe('add_to_inventory (write tool)', () => {
     }))).toBe(400)
   })
 
-  it('takes an optional printing and labels it for the action card (ADR 0034)', async () => {
+  it('takes an optional set code and rarity and labels them for the action card (ADR 0034)', async () => {
     seedDarkMagicianPrinting(db)
     const outcome = await tool('add_to_inventory').run({ db, userId: 'user-a', cardLocale: 'en' }, {
-      items: [{ catalogCardId: CARD.darkMagician, quantity: 2, printingId: DM_LOB }, { catalogCardId: CARD.potOfGreed, quantity: 1 }],
+      items: [
+        { catalogCardId: CARD.darkMagician, quantity: 2, setCode: 'lob-005', rarity: 'ur' },
+        // A rarity YGOPRODeck does not list for the card is allowed.
+        { catalogCardId: CARD.darkMagician, quantity: 1, rarity: 'qcscr' },
+        { catalogCardId: CARD.potOfGreed, quantity: 1 },
+      ],
     })
 
     const withAction = outcome as Extract<ToolOutcome, { action: unknown }>
     expect(withAction.action.payload.items).toEqual([
-      expect.objectContaining({ catalogCardId: CARD.darkMagician, printingId: DM_LOB, printing: 'LOB-005 (UR)' }),
+      expect.objectContaining({ catalogCardId: CARD.darkMagician, setCode: 'LOB-005', rarity: 'ur', printing: 'LOB-005 (UR)' }),
+      expect.objectContaining({ catalogCardId: CARD.darkMagician, setCode: null, rarity: 'qcscr', printing: 'Quarter Century Secret Rare' }),
       expect.not.objectContaining({ printing: expect.anything() }),
     ])
-    // A printing of another card is refused before anything is proposed.
+    // A set code of another card or an unknown rarity is refused before
+    // anything is proposed.
     expect(await statusOf(() => tool('add_to_inventory').run({ db, userId: 'user-a', cardLocale: 'en' }, {
-      items: [{ catalogCardId: CARD.potOfGreed, quantity: 1, printingId: DM_LOB }],
+      items: [{ catalogCardId: CARD.potOfGreed, quantity: 1, setCode: 'LOB-005' }],
+    }))).toBe(400)
+    expect(await statusOf(() => tool('add_to_inventory').run({ db, userId: 'user-a', cardLocale: 'en' }, {
+      items: [{ catalogCardId: CARD.potOfGreed, quantity: 1, rarity: 'Ultra Rare' }],
     }))).toBe(400)
   })
 })
@@ -1055,7 +1065,7 @@ describe('applyAction', () => {
     seedDarkMagicianPrinting(db)
     await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: CARD.darkMagician, quantity: 1 }))
     const outcome = await tool('add_to_inventory').run({ db, userId: 'user-a', cardLocale: 'en' }, {
-      items: [{ catalogCardId: CARD.darkMagician, quantity: 2, printingId: DM_LOB }],
+      items: [{ catalogCardId: CARD.darkMagician, quantity: 2, setCode: 'LOB-005', rarity: 'ur' }],
     })
     const proposed = (outcome as Extract<ToolOutcome, { action: unknown }>).action
     const action = insertPendingAction('user-a', proposed.kind, proposed.payload, proposed.summary)
@@ -1063,7 +1073,7 @@ describe('applyAction', () => {
     await applyAction(db, 'user-a', action.id)
 
     const rows = db.select().from(schema.ownedCard).where(eq(schema.ownedCard.userId, 'user-a')).all()
-    expect(new Map(rows.map(row => [row.printingId, row.quantity]))).toEqual(new Map([[DM_LOB, 2], [null, 1]]))
+    expect(rows.map(row => [row.setCode, row.rarity, row.quantity]).sort()).toEqual([['LOB-005', 'ur', 2], [null, null, 1]].sort())
   })
 
   it('applies an add_to_inventory action stored with collector fields as default rows (ADR 0017)', async () => {
@@ -1081,12 +1091,23 @@ describe('applyAction', () => {
     const rows = db.select().from(schema.ownedCard).where(eq(schema.ownedCard.userId, 'user-a')).all()
     expect(rows).toHaveLength(2)
     // Merged into the existing stack, not a separate German/played row; the
-    // old-style printing id (a bare set code) is no printing of the card any
-    // more, so it is dropped instead of failing the action (ADR 0034).
+    // old `printingId` is ignored (ADR 0034 stores set code and rarity).
     expect(rows.find(row => row.catalogCardId === CARD.darkMagician)).toMatchObject({ quantity: 3 })
     for (const row of rows) {
-      expect(row).toMatchObject({ printingId: null, language: 'en', condition: 'near_mint', edition: 'unlimited' })
+      expect(row).toMatchObject({ printingId: null, setCode: null, rarity: null, language: 'en', condition: 'near_mint', edition: 'unlimited' })
     }
+  })
+
+  it('applies a stored action whose set code or rarity no longer fits as "unknown" (ADR 0034)', async () => {
+    seedDarkMagicianPrinting(db)
+    const action = insertPendingAction('user-a', 'add_to_inventory', {
+      items: [{ catalogCardId: CARD.darkMagician, quantity: 2, setCode: 'GONE-001', rarity: 'not-a-rarity', collectionId: null, note: null }],
+    })
+
+    expect((await applyAction(db, 'user-a', action.id)).status).toBe('applied')
+    expect(db.select().from(schema.ownedCard).all()).toEqual([
+      expect.objectContaining({ catalogCardId: CARD.darkMagician, setCode: null, rarity: null, quantity: 2 }),
+    ])
   })
 
   it('applies the enriched create_deck / update_deck_cards payloads (names, preview) exactly as proposed', async () => {
@@ -1391,7 +1412,7 @@ describe('buildAssistantToolSet (the AI SDK engine, ADR 0020)', () => {
   it('offers add_to_inventory with an optional printing but no other collector fields (ADR 0017, ADR 0034)', async () => {
     const { tools } = buildSet()
     const schemaJson = await schemaOf(tools, 'add_to_inventory')
-    expect(Object.keys(schemaJson.properties.items!.items!.properties)).toEqual(['catalogCardId', 'quantity', 'collectionId', 'printingId'])
+    expect(Object.keys(schemaJson.properties.items!.items!.properties)).toEqual(['catalogCardId', 'quantity', 'collectionId', 'setCode', 'rarity'])
   })
 
   it('rejects empty or non-object arguments with the emptyArguments text, but accepts {} where nothing is required', async () => {

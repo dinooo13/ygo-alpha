@@ -9,12 +9,11 @@ import {
   chunkBulkEntries,
   createEntryRows,
   needsRarity,
-  rowPrintings,
+  rowPrinting,
   summarizeEntryRows,
 } from '~/utils/card-entry'
 import type { EntryCandidate, EntryDefaults, EntryRow, EntrySuggestResult } from '~/utils/card-entry'
 import { setTestLocale } from './fixtures/locale'
-import { optionLabels, selectWithOption } from './fixtures/select-wrapper'
 
 mockNuxtImport('useFetch', () => {
   return () => ({ data: ref({ items: [], allCount: 0 }), pending: ref(false), refresh: vi.fn() })
@@ -124,40 +123,47 @@ describe('entry row preselection', () => {
     expect(summarizeEntryRows([row!])).toMatchObject({ unsicher: 1, sicher: 0 })
   })
 
-  it('a parsed set code without printings preselects the card, printing unknown', () => {
+  it('a parsed set code without a printing of the card preselects it, printing unknown', () => {
     const [row] = createEntryRows([setCodeResult])
 
-    expect(row).toMatchObject({ selectedCardId: 46986414, setCode: 'SDY-006', collectionId: null, printingId: null })
+    expect(row).toMatchObject({ selectedCardId: 46986414, setCode: 'SDY-006', collectionId: null, rarity: null })
     expect(needsRarity(row!)).toBe(false)
     expect(buildBulkEntries([row!], { collectionId: '__no_collection__' })[0]!.item)
       .toEqual({ catalogCardId: 46986414, collectionId: null, quantity: 1 })
   })
 
-  it('preselects the only printing of a set code and saves it (ADR 0034)', () => {
-    const sdy = { id: '46986414|SDY-006|UR', setCode: 'SDY-006', setName: 'Starter Deck: Yugi', rarity: 'Ultra Rare', rarityCode: 'UR' }
-    const [row] = createEntryRows([result('SDY-006', [{ ...setCodeResult.candidates[0]!, printings: [sdy] }], { setCode: 'SDY-006', query: 'SDY-006' })])
+  it('preselects the only listed rarity of a set code and saves both (ADR 0034)', () => {
+    const printing = { setCode: 'SDY-006', setName: 'Starter Deck: Yugi', rarities: ['ur'] }
+    const [row] = createEntryRows([result('sdy-006', [{ ...setCodeResult.candidates[0]!, printing }], { setCode: 'sdy-006', query: 'sdy-006' })])
 
-    expect(row).toMatchObject({ selectedCardId: 46986414, printingId: sdy.id })
+    expect(row).toMatchObject({ selectedCardId: 46986414, rarity: 'ur' })
     expect(needsRarity(row!)).toBe(false)
+    // The set code as the catalog spells it.
     expect(buildBulkEntries([row!], { collectionId: '__no_collection__' })[0]!.item)
-      .toEqual({ catalogCardId: 46986414, collectionId: null, printingId: sdy.id, quantity: 1 })
+      .toEqual({ catalogCardId: 46986414, collectionId: null, setCode: 'SDY-006', rarity: 'ur', quantity: 1 })
   })
 
   it('asks for the rarity when the set code has several, and still saves without one', () => {
-    const printings = [
-      { id: '89631139|LC01-EN004|UR', setCode: 'LC01-EN004', setName: 'Legendary Collection', rarity: 'Ultra Rare', rarityCode: 'UR' },
-      { id: '89631139|LC01-EN004|Quarter Century Secret Rare', setCode: 'LC01-EN004', setName: 'Legendary Collection: 25th Anniversary Edition', rarity: 'Quarter Century Secret Rare', rarityCode: null },
-    ]
-    const candidate = { ...setCodeResult.candidates[0]!, cardId: 89631139, name: 'Blue-Eyes White Dragon', printings }
+    const printing = { setCode: 'LC01-EN004', setName: 'Legendary Collection', rarities: ['ur', 'qcscr'] }
+    const candidate = { ...setCodeResult.candidates[0]!, cardId: 89631139, name: 'Blue-Eyes White Dragon', printing }
     const [row] = createEntryRows([result('LC01-EN004', [candidate], { setCode: 'LC01-EN004', query: 'LC01-EN004' })])
 
-    expect(row).toMatchObject({ selectedCardId: 89631139, printingId: null })
-    expect(rowPrintings(row!)).toEqual(printings)
+    expect(row).toMatchObject({ selectedCardId: 89631139, rarity: null })
+    expect(rowPrinting(row!)).toEqual(printing)
     expect(needsRarity(row!)).toBe(true)
-    // The rarity is optional: the row is resolved, its copies "printing unknown".
+    // The rarity is optional: the row is resolved, its copies keep the set code.
     expect(summarizeEntryRows([row!])).toMatchObject({ sicher: 1 })
-    expect(buildBulkEntries([row!], { collectionId: '__no_collection__' })[0]!.item).not.toHaveProperty('printingId')
-    expect(needsRarity({ ...row!, printingId: printings[1]!.id })).toBe(false)
+    expect(buildBulkEntries([row!], { collectionId: '__no_collection__' })[0]!.item)
+      .toEqual({ catalogCardId: 89631139, collectionId: null, setCode: 'LC01-EN004', quantity: 1 })
+    expect(needsRarity({ ...row!, rarity: 'qcscr' })).toBe(false)
+  })
+
+  it('lets every rarity be picked when the set code lists none', () => {
+    const printing = { setCode: 'SDY-006', setName: 'Starter Deck: Yugi', rarities: [] }
+    const [row] = createEntryRows([result('SDY-006', [{ ...setCodeResult.candidates[0]!, printing }], { setCode: 'SDY-006', query: 'SDY-006' })])
+
+    expect(row).toMatchObject({ rarity: null })
+    expect(needsRarity(row!)).toBe(false)
   })
 
   it('gives every row a unique id', () => {
@@ -297,26 +303,24 @@ describe('EntryReviewTable', () => {
   })
 
   it('asks for the rarity of a set code with several and saves the pick (ADR 0034)', async () => {
-    const printings = [
-      { id: '89631139|LC01-EN004|UR', setCode: 'LC01-EN004', setName: 'Legendary Collection', rarity: 'Ultra Rare', rarityCode: 'UR' },
-      { id: '89631139|LC01-EN004|Quarter Century Secret Rare', setCode: 'LC01-EN004', setName: 'Legendary Collection: 25th Anniversary Edition', rarity: 'Quarter Century Secret Rare', rarityCode: null },
-    ]
-    const blueEyes = candidate({ cardId: 89631139, name: 'Blue-Eyes White Dragon', matchedBy: 'set_code', printings })
+    const printing = { setCode: 'LC01-EN004', setName: 'Legendary Collection', rarities: ['ur', 'qcscr'] }
+    const blueEyes = candidate({ cardId: 89631139, name: 'Blue-Eyes White Dragon', matchedBy: 'set_code', printing })
     const component = await mountTable(createEntryRows([result('LC01-EN004', [blueEyes], { setCode: 'LC01-EN004', query: 'LC01-EN004' })]))
 
     expect(component.text()).toContain('LC01-EN004 gibt es in 2 Seltenheiten. Bitte wähle deine aus.')
-    const select = selectWithOption(component.findAllComponents({ name: 'USelect' }), printings[0]!.id)!
-    expect(select.props('modelValue')).toBeUndefined()
-    expect(optionLabels(select)).toEqual([
-      'Printing unbekannt',
-      'Ultra Rare (UR) · Legendary Collection',
-      'Quarter Century Secret Rare · Legendary Collection: 25th Anniversary Edition',
+    const rarity = component.findComponent({ name: 'InventoryRaritySelect' })
+    expect(rarity.props('suggested')).toEqual(['ur', 'qcscr'])
+    const menu = rarity.findComponent({ name: 'USelectMenu' })
+    expect(menu.props('modelValue')).toBeUndefined()
+    expect((menu.props('items') as Array<Array<{ label: string }>>).map(group => group.map(item => item.label))).toEqual([
+      ['Seltenheit unbekannt', 'Ultra Rare (UR)', 'Quarter Century Secret Rare (QCScR)'],
+      ['Andere Seltenheit…'],
     ])
 
-    await select.setValue(printings[1]!.id)
+    await menu.vm.$emit('update:modelValue', 'qcscr')
     const updated = (component.emitted('update:rows') as Array<[EntryRow[]]>).at(-1)![0]
-    expect(updated[0]).toMatchObject({ printingId: printings[1]!.id })
-    expect(buildBulkEntries(updated, { collectionId: '__no_collection__' })[0]!.item).toMatchObject({ printingId: printings[1]!.id })
+    expect(updated[0]).toMatchObject({ rarity: 'qcscr' })
+    expect(buildBulkEntries(updated, { collectionId: '__no_collection__' })[0]!.item).toMatchObject({ setCode: 'LC01-EN004', rarity: 'qcscr' })
 
     await component.setProps({ rows: updated })
     expect(component.text()).not.toContain('Seltenheiten')

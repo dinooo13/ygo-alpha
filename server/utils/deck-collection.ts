@@ -159,7 +159,8 @@ export function planDeckCollectionFill(db: Db, userId: string, deckId: string, i
           id: ownedCard.id,
           catalogCardId: ownedCard.catalogCardId,
           collectionId: ownedCard.collectionId,
-          printingId: ownedCard.printingId,
+          setCode: ownedCard.setCode,
+          rarity: ownedCard.rarity,
           quantity: ownedCard.quantity,
         })
         .from(ownedCard)
@@ -178,11 +179,13 @@ export function planDeckCollectionFill(db: Db, userId: string, deckId: string, i
         break
       }
       // A collection can hold the card in several printings (ADR 0034), one
-      // stack each: "printing unknown" first, then by printing. The copies
-      // keep their printing when they move.
+      // stack each: "printing unknown" first, then by set code and rarity.
+      // The copies keep their printing when they move.
       const stacks = rows
         .filter(row => (sourceId === UNASSIGNED_COLLECTION_ID ? row.collectionId === null : row.collectionId === sourceId))
-        .sort((a, b) => (a.printingId ?? '').localeCompare(b.printingId ?? '') || a.id.localeCompare(b.id))
+        .sort((a, b) => (a.setCode ?? '').localeCompare(b.setCode ?? '')
+          || (a.rarity ?? '').localeCompare(b.rarity ?? '')
+          || a.id.localeCompare(b.id))
       for (const stack of stacks) {
         if (stillNeeded === 0) {
           break

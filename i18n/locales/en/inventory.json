@@ -70,8 +70,7 @@
       "loadFailed": "Couldn't load your copies.",
       "saveFailed": "Couldn't save the change.",
       "merged": "Merged with the copies in {collection}.",
-      "status": "{collection}: {count} copy | {collection}: {count} copies",
-      "printing": "Change printing ({collection})"
+      "status": "{collection}: {count} copy | {collection}: {count} copies"
     },
     "picker": {
       "title": "Pick a card from the catalog",
@@ -120,8 +119,29 @@
     "printing": {
       "label": "Printings",
       "unknown": "Printing unknown",
-      "search": "Search set code, rarity or set...",
-      "hint": "Set code and rarity of your copies. Leave it empty and the printing stays unknown."
+      "search": "Search set code or set...",
+      "hint": "Set code and rarity of your copies, both optional.",
+      "unknownSetCode": "Set code unknown",
+      "setCodeFor": "Set code: {label}",
+      "rarityFor": "Rarity: {label}"
+    },
+    "rarity": {
+      "unknown": "Rarity unknown",
+      "other": "Other rarity…",
+      "search": "Search rarity...",
+      "group": {
+        "nonFoil": "Non-foil",
+        "foil": "Foil",
+        "secret": "Secret",
+        "precious": "Gold and platinum",
+        "millennium": "Millennium",
+        "parallel": "Parallel",
+        "duelTerminal": "Duel Terminal",
+        "kaiba": "Kaiba Corporation",
+        "rush": "Rush Duel",
+        "colorful": "Colour variants",
+        "other": "Other"
+      }
     }
   }
 }

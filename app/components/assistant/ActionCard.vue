@@ -139,9 +139,9 @@ const summary = computed(() => {
 // Payload fields the write tools actually produce (server/utils/assistant-tools.ts) —
 // only these are ever shown, whichever of them a given action kind carries.
 // `add_to_inventory` rows show their printing by the display-only `printing`
-// label (ADR 0034), never the bare `printingId`; actions stored before ADR
-// 0017 may still carry `printingId`/`language`/`condition`/`edition`, which
-// are not shown.
+// label (ADR 0034: "LC01-EN004 (QCScR)"), never the bare `setCode`/`rarity`;
+// actions stored before ADR 0017 may still carry `printingId`/`language`/
+// `condition`/`edition`, which are not shown.
 const FIELDS = ['name', 'catalogCardId', 'quantity', 'printing', 'section', 'collectionId'] as const
 type Field = typeof FIELDS[number]
 

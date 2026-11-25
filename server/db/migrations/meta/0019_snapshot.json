@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d91915dd-0aa0-43e5-8615-a25c09d20967",
+  "id": "daf363e0-857e-44d3-b487-2e2e409e294d",
   "prevId": "3f684949-1b2e-440c-9701-cff5c1b71052",
   "tables": {
     "account": {
@@ -859,8 +859,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "rarity_code": {
-          "name": "rarity_code",
+        "rarity_key": {
+          "name": "rarity_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1411,6 +1411,20 @@
           "notNull": false,
           "autoincrement": false
         },
+        "set_code": {
+          "name": "set_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rarity": {
+          "name": "rarity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "collection_id": {
           "name": "collection_id",
           "type": "text",
@@ -1495,10 +1509,11 @@
           ],
           "isUnique": false
         },
-        "idx_owned_card_printing": {
-          "name": "idx_owned_card_printing",
+        "idx_owned_card_set_code": {
+          "name": "idx_owned_card_set_code",
           "columns": [
-            "printing_id"
+            "catalog_card_id",
+            "set_code"
           ],
           "isUnique": false
         }

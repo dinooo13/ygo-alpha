@@ -7,7 +7,7 @@
  * - Per row: the collection (a select; picking one that already holds the
  *   card in the same printing merges the copies into it), the quantity
  *   (− / input / +; 0 asks to remove the row), a remove button, the printing
- *   (set code + rarity, or "Printing unbekannt"; picking one the collection
+ *   (set code and rarity, each optional; picking a printing the collection
  *   already holds merges too) and the note (explicit save).
  * - "Zu Sammlung hinzufügen" adds one copy to a collection the card isn't in
  *   yet; it stays when the last row is gone, so the card can come back.
@@ -20,15 +20,15 @@
  *   and reloads the rows. Controls stay enabled while a write is in flight:
  *   disabling a focused button would drop keyboard focus to the page.
  */
-import { printingShortLabel } from '~~/shared/printing'
+import { printingLabel } from '~~/shared/printing'
+import type { StackPrinting } from '~~/shared/printing'
 
 interface OwnedRow {
   id: string
   collectionId: string | null
-  /** `null` = printing unknown (ADR 0034). */
-  printingId: string | null
-  /** "LOB-001 (UR)"; `null` without a printing. */
-  printingLabel: string | null
+  /** Set code and rarity key, `null` = unknown (ADR 0034). */
+  setCode: string | null
+  rarity: string | null
   quantity: number
   note: string | null
 }
@@ -36,10 +36,8 @@ interface OwnedRow {
 interface OwnedRowResponse {
   id: string
   collectionId: string | null
-  printingId?: string | null
-  printingSetCode?: string | null
-  printingRarity?: string | null
-  printingRarityCode?: string | null
+  setCode?: string | null
+  rarity?: string | null
   quantity: number
   note: string | null
 }
@@ -95,28 +93,18 @@ function collectionName(collectionId: string | null): string {
 // printing, so two printings in one collection stay apart.
 function collectionLabel(row: OwnedRow): string {
   const name = collectionName(row.collectionId)
-  return row.printingLabel ? `${name} · ${row.printingLabel}` : name
+  const printing = printingLabel(row)
+  return printing ? `${name} · ${printing}` : name
 }
 
-const { printings, loading: printingsLoading } = useCardPrintings(() => props.catalogCardId)
-
-function printingLabelOf(printingId: string | null): string | null {
-  if (printingId === null) {
-    return null
-  }
-  const printing = printings.value.find(entry => entry.id === printingId)
-  return printing ? printingShortLabel(printing) : null
-}
+const { setCodes, loading: printingsLoading } = useCardPrintings(() => props.catalogCardId)
 
 function toOwnedRow(item: OwnedRowResponse): OwnedRow {
-  const printingId = item.printingId ?? null
   return {
     id: item.id,
     collectionId: item.collectionId,
-    printingId,
-    printingLabel: item.printingSetCode
-      ? printingShortLabel({ setCode: item.printingSetCode, rarity: item.printingRarity, rarityCode: item.printingRarityCode })
-      : printingLabelOf(printingId),
+    setCode: item.setCode ?? null,
+    rarity: item.rarity ?? null,
     quantity: item.quantity,
     note: item.note,
   }
@@ -155,7 +143,7 @@ function sortRows(list: OwnedRow[]): OwnedRow[] {
   // "printing unknown" first, then by printing.
   return [...list].sort((a, b) =>
     compareCollections(a.collectionId, b.collectionId)
-    || (a.printingLabel ?? '').localeCompare(b.printingLabel ?? ''))
+    || (printingLabel(a) ?? '').localeCompare(printingLabel(b) ?? ''))
 }
 
 let latest = 0
@@ -262,16 +250,19 @@ function moveRow(row: OwnedRow, value: string) {
   })
 }
 
-function setPrinting(row: OwnedRow, printingId: string | null) {
-  if (printingId === row.printingId) {
+function setPrinting(row: OwnedRow, printing: StackPrinting) {
+  if (printing.setCode === row.setCode && printing.rarity === row.rarity) {
     return
   }
   const { id } = row
   const target = collectionName(row.collectionId)
-  row.printingId = printingId
-  row.printingLabel = printingLabelOf(printingId)
+  row.setCode = printing.setCode
+  row.rarity = printing.rarity
   enqueue(async () => {
-    const saved = await $fetch<{ id: string }>(`/api/inventory/${id}`, { method: 'PATCH', body: { printingId } })
+    const saved = await $fetch<{ id: string }>(`/api/inventory/${id}`, {
+      method: 'PATCH',
+      body: { setCode: printing.setCode, rarity: printing.rarity },
+    })
     if (saved.id !== id) {
       toast.add({ title: t('inventory.editor.merged', { collection: target }), color: 'success', icon: 'i-lucide-merge' })
     }
@@ -481,12 +472,12 @@ function retry() {
             class="mt-2"
           >
             <InventoryPrintingSelect
-              :model-value="row.printingId"
-              :printings="printings"
+              :model-value="{ setCode: row.setCode, rarity: row.rarity }"
+              :set-codes="setCodes"
               :loading="printingsLoading"
-              :label="t('inventory.editor.printing', { collection: collectionLabel(row) })"
+              :label="collectionLabel(row)"
               size="sm"
-              @update:model-value="(value: string | null) => setPrinting(row, value)"
+              @update:model-value="(value: StackPrinting) => setPrinting(row, value)"
             />
           </div>
 

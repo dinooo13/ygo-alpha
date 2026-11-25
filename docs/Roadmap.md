@@ -177,14 +177,16 @@ Tester-Feedback Nov 2026 (#176, [ADR 0034](adr/0034-inventory-printings.md)):
 the inventory stores the printing again, optionally.
 
 - [x] Every printing survives the catalog sync (key: card + set code +
-      rarity; `rarity_code` stored).
-- [x] An optional printing per stack, part of the merge key, in add, edit,
-      bulk add, moves, "Sammlung aus Deck befüllen" and the assistant's
-      `add_to_inventory`.
-- [x] A printing picker in "Karte hinzufügen" and the card's detail panel;
-      quick entry preselects the printing of a set code and asks for the
-      rarity when the code has several; rows and tiles show it; a
-      "Set / Printing" filter.
+      rarity), its rarity mapped onto a fixed list of 67 rarities (from
+      Yugipedia).
+- [x] An optional set code and rarity per stack, part of the merge key, in
+      add, edit, bulk add, moves, "Sammlung aus Deck befüllen" and the
+      assistant's `add_to_inventory`.
+- [x] Set code and rarity pickers in "Karte hinzufügen" and the card's
+      detail panel: the rarities YGOPRODeck lists for the set code first,
+      "Andere Seltenheit…" for the full list. Quick entry preselects a
+      single rarity and asks when the code has several; rows and tiles show
+      the printing; a "Set / Printing" filter.
 - [ ] The image of the printing instead of the card's artwork (needs
       research: the card data has one image per artwork, not per set).
 - [ ] Prices per printing.

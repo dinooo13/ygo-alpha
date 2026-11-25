@@ -20,7 +20,7 @@ import { createError } from 'h3'
 import { jsonSchema, tool } from 'ai'
 import type { JSONSchema7, JSONValue, Tool } from 'ai'
 import type { useDb } from '../db'
-import { assistantAction, catalogCard, catalogCardImage, catalogPrinting, collection, ownedCard } from '../db/schema'
+import { assistantAction, catalogCard, catalogCardImage, collection, ownedCard } from '../db/schema'
 import { activeCatalogCard, cardNameMatches } from './card-name-search'
 import { getCatalogCardDetail } from './catalog-search'
 import { requireCollectionOwnedByUser, listCollections } from './collections'
@@ -55,7 +55,7 @@ import { AssistantToolError } from './assistant-model'
 import { resolveCardNames } from './assistant-chat'
 import type { DeckValidation } from '../../shared/rule-formats'
 import type { AppLocale } from '../../shared/locale'
-import { printingShortLabel } from '../../shared/printing'
+import { printingLabel } from '../../shared/printing'
 import { primaryImageFirst } from './card-image-sql'
 import { cardNameDeSql } from './card-translation-sql'
 
@@ -623,31 +623,23 @@ function withCardNames<T extends { catalogCardId: number }>(db: Db, cards: T[]):
   }))
 }
 
-/** Adds the display-only `printing` label ("LOB-001 (UR)") to rows with a printing. */
-function withPrintingLabels<T extends { printingId: string | null }>(db: Db, rows: T[]): Array<T & { printing?: string }> {
-  const ids = [...new Set(rows.map(row => row.printingId).filter((id): id is string => id !== null))]
-  if (ids.length === 0) {
-    return rows
-  }
-  const printings = new Map(
-    db.select({ id: catalogPrinting.id, setCode: catalogPrinting.setCode, rarity: catalogPrinting.rarity, rarityCode: catalogPrinting.rarityCode })
-      .from(catalogPrinting)
-      .where(inArray(catalogPrinting.id, ids))
-      .all()
-      .map(printing => [printing.id, printingShortLabel(printing)]),
-  )
-  return rows.map(row => row.printingId && printings.has(row.printingId) ? { ...row, printing: printings.get(row.printingId)! } : row)
+/** Adds the display-only `printing` label ("LC01-EN004 (QCScR)") to rows with a set code or rarity. */
+function withPrintingLabels<T extends { setCode: string | null, rarity: string | null }>(rows: T[]): Array<T & { printing?: string }> {
+  return rows.map((row) => {
+    const printing = printingLabel(row)
+    return printing ? { ...row, printing } : row
+  })
 }
 
 async function toolAddToInventory(db: Db, userId: string, args: unknown): Promise<ToolOutcome> {
   const record = requireArgs(args)
   const inputs: InventoryInput[] = validateInventoryBulkInput(db, userId, { items: record.items })
-  // The payload items carry `{ catalogCardId, collectionId, printingId,
+  // The payload items carry `{ catalogCardId, collectionId, setCode, rarity,
   // quantity, note }` (ADR 0034; no language, condition or edition, ADR 0017)
   // plus a display-only `name`/`nameDe` and `printing` label, like the deck
   // tools' rows: `validateInventoryInput` reads only the fields it knows, so
   // the display fields never reach the write.
-  const items = withPrintingLabels(db, withCardNames(db, inputs))
+  const items = withPrintingLabels(withCardNames(db, inputs))
 
   const summary = ACTION_SUMMARY.addToInventory(items.length, items.map(item => `${item.name} x${item.quantity}`).join(', '))
 
@@ -914,7 +906,8 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
               catalogCardId: { type: 'integer' },
               quantity: { type: 'integer' },
               collectionId: { type: 'string' },
-              printingId: { type: 'string', description: TOOL_PARAM_DESCRIPTIONS.printingId },
+              setCode: { type: 'string', description: TOOL_PARAM_DESCRIPTIONS.setCode },
+              rarity: { type: 'string', description: TOOL_PARAM_DESCRIPTIONS.rarity },
             },
           },
         },
@@ -1350,10 +1343,10 @@ function executeActionPayload(db: Db, userId: string, action: AssistantActionRow
   switch (action.kind) {
     case 'add_to_inventory': {
       const payload = action.payload as unknown as { items: unknown }
-      // Actions stored before ADR 0017 may still carry `language`/`condition`/
-      // `edition` (ignored) and a `printingId` in the old set-code form; a
-      // printing that is not (or no longer) one of the card's is dropped, so
-      // the copies are added as "printing unknown" instead of failing (ADR 0034).
+      // Actions stored before ADR 0017 may still carry `printingId`/`language`/
+      // `condition`/`edition` (ignored). A set code the card no longer lists or
+      // an unknown rarity is dropped, so the copies are added with that part
+      // unknown instead of failing (ADR 0034).
       const inputs = validateInventoryBulkInput(db, userId, { items: payload.items }, { unknownPrinting: 'drop' })
       return addOwnedCardsBulkSync(db, userId, inputs)
     }

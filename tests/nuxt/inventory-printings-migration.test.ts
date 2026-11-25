@@ -1,12 +1,12 @@
-// Migration 0019 (#176, ADR 0034): `catalog_printing` gets `rarity_code`,
-// `owned_card.printing_id` an index, and the printings are re-keyed from the
-// bare set code to `<card id>|<set code>|<rarity>`. No table rebuild: the
+// Migration 0019 (#176, ADR 0034): `owned_card` gets `set_code` and `rarity`
+// (and an index), `catalog_printing` gets `rarity_key`. No table rebuild: the
 // migrator runs every migration inside one transaction, where
 // `PRAGMA foreign_keys=OFF` does nothing, so a rebuild's DROP TABLE would
 // cascade. This runs 0000–0018 on an in-memory DB (the state production is
 // in: every `printing_id` NULL since ADR 0017), seeds an inventory, applies
 // 0019 the way the migrator does, and checks that every row and quantity
-// survives — also through the first catalog sync after it.
+// survives — also through the first catalog sync after it, which re-keys the
+// printings to `<card id>|<set code>|<rarity>`.
 
 import { readFileSync } from 'node:fs'
 import Database from 'better-sqlite3'
@@ -95,63 +95,48 @@ function ownedRows(sqlite: Database.Database) {
 }
 
 describe('migration 0019: printings in the inventory (#176, ADR 0034)', () => {
-  it('is plain SQL: ADD COLUMN, CREATE INDEX and a re-key, no table rebuild', () => {
+  it('is plain SQL: ADD COLUMN and CREATE INDEX, no table rebuild', () => {
     expect(printingsMigration.tag).toBe('0019_inventory_printings')
     const sql = withoutComments(migrationSql(printingsMigration))
     expect(sql).not.toMatch(/DROP TABLE|CREATE TABLE|RENAME/i)
     expect(sql).not.toContain('__new_')
-    expect(statements(sql).map(statement => statement.split(/\s+/).slice(0, 3).join(' '))).toEqual([
-      'ALTER TABLE `catalog_printing`',
-      'CREATE INDEX `idx_owned_card_printing`',
-      'UPDATE `catalog_printing` SET',
+    expect(statements(sql).map(statement => statement.split(/\s+/).slice(0, 5).join(' '))).toEqual([
+      'ALTER TABLE `catalog_printing` ADD `rarity_key`',
+      'ALTER TABLE `owned_card` ADD `set_code`',
+      'ALTER TABLE `owned_card` ADD `rarity`',
+      'CREATE INDEX `idx_owned_card_set_code` ON `owned_card`',
     ])
   })
 
-  it('keeps every owned row and quantity unchanged and re-keys the printings', () => {
+  it('keeps every owned row and quantity unchanged; the new columns start as "unknown"', () => {
     const sqlite = databaseBefore()
     seed(sqlite)
-    const before = ownedRows(sqlite)
+    const before = ownedRows(sqlite) as Array<Record<string, unknown>>
+    const printingsBefore = sqlite.prepare('SELECT id FROM catalog_printing ORDER BY id').all()
 
     applyPrintingsMigration(sqlite)
 
-    expect(ownedRows(sqlite)).toEqual(before)
+    const after = ownedRows(sqlite) as Array<Record<string, unknown>>
+    expect(after).toEqual(before.map(row => ({ ...row, set_code: null, rarity: null })))
     expect(before).toHaveLength(4)
     expect((sqlite.prepare('SELECT sum(quantity) AS total FROM owned_card').get() as { total: number }).total).toBe(1005)
-    expect(sqlite.prepare('SELECT id, card_id, set_code, rarity, rarity_code FROM catalog_printing ORDER BY id').all()).toEqual([
-      { id: `${DM}|LOB-005|Ultra Rare`, card_id: DM, set_code: 'LOB-005', rarity: 'Ultra Rare', rarity_code: null },
-      { id: `${DM}|SDY-006|Common`, card_id: DM, set_code: 'SDY-006', rarity: 'Common', rarity_code: null },
-      { id: `${POG}|LOB-119|Common`, card_id: POG, set_code: 'LOB-119', rarity: 'Common', rarity_code: null },
-    ])
-    expect(sqlite.prepare('SELECT name FROM sqlite_master WHERE type = \'index\' AND name = \'idx_owned_card_printing\'').all())
-      .toEqual([{ name: 'idx_owned_card_printing' }])
-    // The foreign key still points at catalog_printing(id), ON DELETE SET NULL.
+    // The printings keep their ids until the next sync.
+    expect(sqlite.prepare('SELECT id FROM catalog_printing ORDER BY id').all()).toEqual(printingsBefore)
+    expect(sqlite.prepare('SELECT DISTINCT rarity_key FROM catalog_printing').all()).toEqual([{ rarity_key: null }])
+    expect(sqlite.prepare('SELECT name FROM sqlite_master WHERE type = \'index\' AND name = \'idx_owned_card_set_code\'').all())
+      .toEqual([{ name: 'idx_owned_card_set_code' }])
+    // The legacy foreign key is untouched.
     expect(sqlite.prepare('SELECT * FROM pragma_foreign_key_list(\'owned_card\')').all())
       .toContainEqual(expect.objectContaining({ table: 'catalog_printing', from: 'printing_id', to: 'id', on_delete: 'SET NULL' }))
     expect(sqlite.pragma('foreign_key_check')).toEqual([])
     expect(sqlite.pragma('integrity_check', { simple: true })).toBe('ok')
   })
 
-  it('leaves a printing alone that an owned card references, so the foreign key holds', () => {
-    const sqlite = databaseBefore()
-    seed(sqlite)
-    sqlite.prepare('UPDATE owned_card SET printing_id = ? WHERE id = ?').run('LOB-005', 'own-1')
-
-    applyPrintingsMigration(sqlite)
-
-    expect(sqlite.prepare('SELECT id FROM catalog_printing ORDER BY id').all()).toEqual([
-      { id: `${DM}|SDY-006|Common` },
-      { id: `${POG}|LOB-119|Common` },
-      { id: 'LOB-005' },
-    ])
-    expect(sqlite.prepare('SELECT printing_id FROM owned_card WHERE id = ?').get('own-1')).toEqual({ printing_id: 'LOB-005' })
-    expect(sqlite.pragma('foreign_key_check')).toEqual([])
-  })
-
   it('keeps every row and quantity through the first sync, and old rows stay "printing unknown"', async () => {
     const sqlite = databaseBefore()
     seed(sqlite)
-    const before = ownedRows(sqlite)
     applyPrintingsMigration(sqlite)
+    const before = ownedRows(sqlite)
     const db = drizzle(sqlite, { schema })
 
     const result = await syncCatalog(db, {
@@ -162,20 +147,21 @@ describe('migration 0019: printings in the inventory (#176, ADR 0034)', () => {
       retireGuard: { minimum: 10, ratio: 1 },
     })
 
-    // The re-keyed rows without a rarity code made way for the final keys.
-    expect(result.cleanup.printings).toBe(2)
-    expect(db.select({ id: schema.catalogPrinting.id }).from(schema.catalogPrinting).all().map(row => row.id).sort()).toEqual([
-      `${DM}|LOB-005|UR`,
-      `${DM}|SDY-006|C`,
-      `${POG}|LOB-119|Common`,
+    // The rows under the old keys made way for the new ones.
+    expect(result.cleanup.printings).toBe(3)
+    expect(db.select({ id: schema.catalogPrinting.id, rarityKey: schema.catalogPrinting.rarityKey }).from(schema.catalogPrinting).all()
+      .sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: `${DM}|LOB-005|ur`, rarityKey: 'ur' },
+      { id: `${DM}|SDY-006|c`, rarityKey: 'c' },
+      { id: `${POG}|LOB-119|c`, rarityKey: 'c' },
     ])
     expect(ownedRows(sqlite)).toEqual(before)
 
     // Existing stacks are "printing unknown": a copy without a printing joins
     // them, a copy with one gets a stack of its own.
     const plain = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: DM, quantity: 1 }))
-    const printed = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: DM, printingId: `${DM}|LOB-005|UR` }))
-    expect(plain).toMatchObject({ id: 'own-1', quantity: 4, printingId: null })
+    const printed = await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: DM, setCode: 'LOB-005', rarity: 'ur' }))
+    expect(plain).toMatchObject({ id: 'own-1', quantity: 4, setCode: null, rarity: null })
     expect(printed.id).not.toBe('own-1')
     expect(listOwnedCards(db, 'user-a').total).toBe(4)
   })

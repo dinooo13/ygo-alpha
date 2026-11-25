@@ -62,9 +62,9 @@ interface CardSeed {
 }
 
 // Printings keyed like the sync keys them (ADR 0034).
-const DM_LOB = '46986414|LOB-005|UR'
-const DM_SDY = '46986414|SDY-006|UR'
-const POG_MRD = '55144522|MRD-001|C'
+const DM_LOB = '46986414|LOB-005|ur'
+const DM_SDY = '46986414|SDY-006|ur'
+const POG_MRD = '55144522|MRD-001|c'
 
 function seedPrintings(db: TestDb) {
   db.insert(schema.catalogSet).values([
@@ -73,9 +73,9 @@ function seedPrintings(db: TestDb) {
     { id: 'mrd', name: 'Metal Raiders' },
   ]).run()
   db.insert(schema.catalogPrinting).values([
-    { id: DM_LOB, cardId: 46986414, setId: 'lob', setCode: 'LOB-005', rarity: 'Ultra Rare', rarityCode: 'UR' },
-    { id: DM_SDY, cardId: 46986414, setId: 'sdy', setCode: 'SDY-006', rarity: 'Ultra Rare', rarityCode: 'UR' },
-    { id: POG_MRD, cardId: 55144522, setId: 'mrd', setCode: 'MRD-001', rarity: 'Common', rarityCode: 'C' },
+    { id: DM_LOB, cardId: 46986414, setId: 'lob', setCode: 'LOB-005', rarity: 'Ultra Rare', rarityKey: 'ur' },
+    { id: DM_SDY, cardId: 46986414, setId: 'sdy', setCode: 'SDY-006', rarity: 'Ultra Rare', rarityKey: 'ur' },
+    { id: POG_MRD, cardId: 55144522, setId: 'mrd', setCode: 'MRD-001', rarity: 'Common', rarityKey: 'c' },
   ]).run()
 }
 
@@ -653,9 +653,9 @@ describe('inventory search facets', () => {
       { id: 55144522, name: 'Pot of Greed', type: 'Spell Card' },
     ])
     seedPrintings(db)
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: DM_LOB }))
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: DM_SDY }))
-    await addOwnedCard(db, 'user-b', validateInventoryInput({ catalog_card_id: 55144522, printingId: POG_MRD }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'LOB-005', rarity: 'ur' }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'SDY-006', rarity: 'ur' }))
+    await addOwnedCard(db, 'user-b', validateInventoryInput({ catalog_card_id: 55144522, setCode: 'MRD-001', rarity: 'c' }))
 
     expect(loadInventorySearchFacets(db, 'user-a')).toMatchObject({
       sets: [
@@ -704,10 +704,10 @@ describe('inventory search set filter (ADR 0034)', () => {
       { id: 55144522, name: 'Pot of Greed', type: 'Spell Card' },
     ])
     seedPrintings(db)
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: DM_LOB, quantity: 2 }))
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, printingId: DM_SDY, quantity: 1 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'LOB-005', rarity: 'ur', quantity: 2 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, setCode: 'SDY-006', rarity: 'ur', quantity: 1 }))
     await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 46986414, quantity: 4 }))
-    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 55144522, printingId: POG_MRD, quantity: 1 }))
+    await addOwnedCard(db, 'user-a', validateInventoryInput({ catalog_card_id: 55144522, setCode: 'MRD-001', rarity: 'c', quantity: 1 }))
   })
 
   function totals(rawQuery: Record<string, unknown>) {

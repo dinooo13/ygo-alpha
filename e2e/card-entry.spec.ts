@@ -62,8 +62,11 @@ test.describe('Schnellerfassung', () => {
 
     await expect(page.getByText('1 sicher')).toBeVisible()
     await expect(page.getByText('LC01-EN004 gibt es in 2 Seltenheiten. Bitte wähle deine aus.')).toBeVisible()
-    await page.getByRole('combobox', { name: 'Printing für LC01-EN004' }).click()
-    await page.getByRole('option', { name: 'Quarter Century Secret Rare · Legendary Collection: 25th Anniversary Edition' }).click()
+    // The rarities YGOPRODeck lists for LC01-EN004 first; any other one via
+    // "Andere Seltenheit…".
+    await page.getByRole('button', { name: 'Printing für LC01-EN004' }).click()
+    await expect(page.getByRole('option', { name: 'Andere Seltenheit…' })).toBeVisible()
+    await page.getByRole('option', { name: 'Quarter Century Secret Rare (QCScR)' }).click()
     await expect(page.getByText('Seltenheiten')).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Alle speichern' }).click()
@@ -71,7 +74,7 @@ test.describe('Schnellerfassung', () => {
 
     await page.goto('/inventory')
     await waitForHydration(page)
-    await expect(page.getByTestId('row-printing')).toHaveText('Printing: LC01-EN004 Quarter Century Secret Rare')
+    await expect(page.getByTestId('row-printing')).toHaveText('Printing: LC01-EN004 (QCScR)')
   })
 
   test('recognizes German card names (ADR 0015)', async ({ page }) => {

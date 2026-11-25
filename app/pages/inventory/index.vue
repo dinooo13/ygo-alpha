@@ -8,7 +8,7 @@ import type { CardDetailPreview } from '~/utils/card-detail'
 import type { InventorySearchResultItem } from '~/utils/inventory-search-result'
 import { isPreviousHistoryEntry } from '~/utils/history-entry'
 import { csvQueryValue, queryList } from '~/utils/query-list'
-import { printingShortLabel } from '~~/shared/printing'
+import { printingLabel } from '~~/shared/printing'
 
 interface InventoryItem {
   id: string
@@ -24,12 +24,10 @@ interface InventoryItem {
   cardTextExcerptDe?: string | null
   cardRetired?: boolean
   imageUrlSmall: string | null
-  /** The stack's printing (ADR 0034); `null` = printing unknown. */
-  printingId?: string | null
-  printingSetCode?: string | null
-  printingRarity?: string | null
-  printingRarityCode?: string | null
-  printingSetName?: string | null
+  /** The stack's set code and rarity key (ADR 0034); `null` = unknown. */
+  setCode?: string | null
+  rarity?: string | null
+  setName?: string | null
 }
 
 interface CatalogCard {
@@ -567,9 +565,10 @@ function moveEntryFor(item: InventoryItem): MoveEntry {
     ownedCardId: item.id,
     // Two printings of one card in one collection are two stacks: the
     // printing tells them apart in the move dialog (ADR 0034).
-    name: item.printingSetCode
-      ? `${cardName({ name: item.cardName, nameDe: item.cardNameDe })} · ${printingShortLabel({ setCode: item.printingSetCode, rarity: item.printingRarity, rarityCode: item.printingRarityCode })}`
-      : cardName({ name: item.cardName, nameDe: item.cardNameDe }),
+    name: [
+      cardName({ name: item.cardName, nameDe: item.cardNameDe }),
+      printingLabel({ setCode: item.setCode ?? null, rarity: item.rarity ?? null }),
+    ].filter(Boolean).join(' · '),
     quantity: item.quantity,
     collectionId: item.collectionId,
   }

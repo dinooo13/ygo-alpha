@@ -7,6 +7,8 @@ import type { DecklistEntry } from '../../shared/decklist'
 import { DECK_SECTIONS } from '../../shared/deck-sections'
 import type { useDb } from '../db'
 import { catalogCard, catalogCardTranslation, catalogPrinting, catalogSet } from '../db/schema'
+import type { CardSetCode } from '../../shared/printing'
+import { RARITIES } from '../../shared/rarity'
 import { primaryImageUrlSql } from './card-image-sql'
 import { activeCatalogCard, escapedLike, escapeLikeTerm } from './card-name-search'
 import { resolvePasscode } from './card-passcode'
@@ -41,19 +43,13 @@ export interface EntryCandidate {
   score: number
   matchedBy: EntryMatchedBy
   /**
-   * With a set code in the line: the card's printings under that code
-   * (ADR 0034), one per rarity. Quick entry preselects a single one and asks
-   * for the rarity when there are several.
+   * With a set code in the line: that set code as the catalog spells it,
+   * with the set name and the rarities YGOPRODeck lists for it (ADR 0034).
+   * Quick entry preselects a single rarity, asks when there are several and
+   * offers every rarity when there is none. Absent when the card has no
+   * printing under that code.
    */
-  printings?: EntryPrinting[]
-}
-
-export interface EntryPrinting {
-  id: string
-  setCode: string
-  setName: string
-  rarity: string | null
-  rarityCode: string | null
+  printing?: CardSetCode
 }
 
 export interface EntrySuggestResult {
@@ -466,36 +462,44 @@ export function suggestCatalogMatches(
   if (!parsed.setCode) {
     return candidates
   }
-  const printings = printingsBySetCode(db, candidates.map(candidate => candidate.cardId), parsed.setCode)
-  return candidates.map(candidate => ({ ...candidate, printings: printings.get(candidate.cardId) ?? [] }))
+  const printings = setCodePrintings(db, candidates.map(candidate => candidate.cardId), parsed.setCode)
+  return candidates.map((candidate) => {
+    const printing = printings.get(candidate.cardId)
+    return printing ? { ...candidate, printing } : candidate
+  })
 }
 
-/** The printings of `cardIds` under one set code (any case), per card, by rarity. */
-function printingsBySetCode(db: Db, cardIds: number[], setCode: string): Map<number, EntryPrinting[]> {
-  const byCardId = new Map<number, EntryPrinting[]>()
+/**
+ * The set code (any case) of each of `cardIds` that has it, with the set name
+ * and the rarities YGOPRODeck lists for it, in `RARITIES` order.
+ */
+function setCodePrintings(db: Db, cardIds: number[], setCode: string): Map<number, CardSetCode> {
+  const byCardId = new Map<number, CardSetCode & { keys: Set<string> }>()
   if (cardIds.length === 0) {
     return byCardId
   }
   const rows = db
     .select({
       cardId: catalogPrinting.cardId,
-      id: catalogPrinting.id,
       setCode: catalogPrinting.setCode,
       setName: catalogSet.name,
-      rarity: catalogPrinting.rarity,
-      rarityCode: catalogPrinting.rarityCode,
+      rarityKey: catalogPrinting.rarityKey,
     })
     .from(catalogPrinting)
     .innerJoin(catalogSet, eq(catalogPrinting.setId, catalogSet.id))
     .where(and(inArray(catalogPrinting.cardId, cardIds), sql`lower(${catalogPrinting.setCode}) = ${setCode.toLowerCase()}`))
-    .orderBy(catalogSet.name, catalogPrinting.rarity)
     .all()
-  for (const { cardId, ...printing } of rows) {
-    const list = byCardId.get(cardId) ?? []
-    list.push(printing)
-    byCardId.set(cardId, list)
+  for (const row of rows) {
+    const entry = byCardId.get(row.cardId) ?? { setCode: row.setCode, setName: row.setName, rarities: [], keys: new Set<string>() }
+    if (row.rarityKey) {
+      entry.keys.add(row.rarityKey)
+    }
+    byCardId.set(row.cardId, entry)
   }
-  return byCardId
+  return new Map([...byCardId].map(([cardId, { keys, ...entry }]) => [
+    cardId,
+    { ...entry, rarities: RARITIES.filter(rarity => keys.has(rarity.key)).map(rarity => rarity.key) },
+  ]))
 }
 
 /**

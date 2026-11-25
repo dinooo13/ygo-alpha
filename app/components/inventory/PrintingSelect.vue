@@ -1,16 +1,17 @@
 <script setup lang="ts">
 /**
- * The printing of owned copies (ADR 0034): "Printing unbekannt" or one of
- * the card's printings (set code and rarity, the set name below), searchable
- * by both. Used by "Karte hinzufügen" and the copies in the card's detail
- * panel. `v-model` is the printing id, `null` for "printing unknown".
+ * The printing of owned copies (ADR 0034): the set code ("Set-Code
+ * unbekannt" or one of the card's, searchable by code and set name) and the
+ * rarity (`InventoryRaritySelect`, suggesting what YGOPRODeck lists for the
+ * set code). Choosing a set code with a single listed rarity picks that
+ * rarity. Used by "Karte hinzufügen" and the copies in the card's detail
+ * panel. `v-model` is the whole printing, so one change is one update.
  */
-import { printingRarityLabel } from '~~/shared/printing'
-import type { CardPrinting } from '~/composables/useCardPrintings'
+import type { CardSetCode, StackPrinting } from '~~/shared/printing'
 
 const props = withDefaults(defineProps<{
-  printings: CardPrinting[]
-  /** The select's accessible name. */
+  setCodes: CardSetCode[]
+  /** Prefix of the selects' accessible names, e.g. the stack's label. */
   label: string
   loading?: boolean
   size?: 'xs' | 'sm' | 'md'
@@ -19,40 +20,56 @@ const props = withDefaults(defineProps<{
   size: 'md',
 })
 
-const model = defineModel<string | null>({ required: true })
+const model = defineModel<StackPrinting>({ required: true })
 
 const { t } = useI18n()
 
-// reka-ui reserves `''` for "no selection", so "unknown" gets a value of its own.
 const UNKNOWN_VALUE = '__unknown__'
 
-const items = computed(() => [
-  { label: t('inventory.printing.unknown'), value: UNKNOWN_VALUE },
-  ...props.printings.map(printing => ({
-    label: [printing.setCode, printingRarityLabel(printing)].filter(Boolean).join(' · '),
-    description: printing.setName,
-    value: printing.id,
-  })),
+const setCodeItems = computed(() => [
+  { label: t('inventory.printing.unknownSetCode'), value: UNKNOWN_VALUE },
+  ...props.setCodes.map(entry => ({ label: entry.setCode, description: entry.setName, value: entry.setCode })),
 ])
 
-const selection = computed({
-  get: () => model.value ?? UNKNOWN_VALUE,
+const current = computed(() => props.setCodes.find(entry => entry.setCode === model.value.setCode))
+
+const setCodeSelection = computed({
+  get: () => model.value.setCode ?? UNKNOWN_VALUE,
   set: (value: string | undefined) => {
-    model.value = !value || value === UNKNOWN_VALUE ? null : value
+    const setCode = !value || value === UNKNOWN_VALUE ? null : value
+    const listed = props.setCodes.find(entry => entry.setCode === setCode)?.rarities ?? []
+    model.value = { setCode, rarity: listed.length === 1 ? listed[0]! : model.value.rarity }
+  },
+})
+
+const raritySelection = computed({
+  get: () => model.value.rarity,
+  set: (rarity: string | null) => {
+    model.value = { setCode: model.value.setCode, rarity }
   },
 })
 </script>
 
 <template>
-  <USelectMenu
-    v-model="selection"
-    :items="items"
-    value-key="value"
-    :filter-fields="['label', 'description']"
-    :loading="loading"
-    :size="size"
-    :aria-label="label"
-    :search-input="{ placeholder: t('inventory.printing.search') }"
-    class="w-full min-w-0"
-  />
+  <div class="grid min-w-0 gap-2 sm:grid-cols-2">
+    <USelectMenu
+      v-model="setCodeSelection"
+      :items="setCodeItems"
+      value-key="value"
+      :filter-fields="['label', 'description']"
+      :loading="loading"
+      :size="size"
+      :aria-label="t('inventory.printing.setCodeFor', { label })"
+      :search-input="{ placeholder: t('inventory.printing.search') }"
+      class="w-full min-w-0"
+      data-testid="printing-set-code"
+    />
+    <InventoryRaritySelect
+      v-model="raritySelection"
+      :suggested="current?.rarities ?? []"
+      :size="size"
+      :label="t('inventory.printing.rarityFor', { label })"
+      data-testid="printing-rarity"
+    />
+  </div>
 </template>

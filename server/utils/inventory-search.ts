@@ -33,8 +33,8 @@ export interface InventorySearchFilters {
   race: string[]
   level: number[]
   // Set ids (`catalog_set.id`) and/or `UNKNOWN_PRINTING_FILTER` (ADR 0034):
-  // only the stacks whose printing is in one of these sets, or that have no
-  // printing. A row filter, so the quantities count those stacks only.
+  // only the stacks whose set code is in one of these sets, or that have no
+  // set code. A row filter, so the quantities count those stacks only.
   set: string[]
   // A collection id owned by the caller, or `UNASSIGNED_COLLECTION_ID`.
   collectionId?: string
@@ -177,10 +177,28 @@ export function inventoryCardFilterClauses(filters: InventoryCardFilters): SQL[]
 }
 
 /**
+ * The name of the set an owned stack's set code belongs to (ADR 0034), or
+ * NULL without a set code (or one the catalog no longer lists). A subquery,
+ * since several printings (one per rarity) share a set code, and a reprint
+ * can reuse one under another set name (LC01-EN004): the printing with the
+ * stack's rarity wins.
+ */
+export function ownedSetNameSql(): SQL<string | null> {
+  return sql<string | null>`(
+    SELECT ${catalogSet.name} FROM ${catalogPrinting}
+    INNER JOIN ${catalogSet} ON ${catalogSet.id} = ${catalogPrinting.setId}
+    WHERE ${catalogPrinting.cardId} = ${ownedCard.catalogCardId}
+      AND ${catalogPrinting.setCode} = ${ownedCard.setCode}
+    ORDER BY ${catalogPrinting.rarityKey} IS ${ownedCard.rarity} DESC, ${catalogSet.name}
+    LIMIT 1
+  )`
+}
+
+/**
  * The set filter (ADR 0034) as a row clause on `owned_card`: the stacks whose
- * printing is in one of `sets`, plus, with `UNKNOWN_PRINTING_FILTER`, the
- * stacks without a printing. `undefined` without a filter. No join needed:
- * the printing's set is looked up in a subquery.
+ * set code belongs to one of `sets`, plus, with `UNKNOWN_PRINTING_FILTER`,
+ * the stacks without a set code. `undefined` without a filter. No join
+ * needed: the set is looked up in a subquery.
  */
 export function printingSetFilterClause(sets: string[]): SQL | undefined {
   if (sets.length === 0) {
@@ -189,12 +207,15 @@ export function printingSetFilterClause(sets: string[]): SQL | undefined {
   const setIds = sets.filter(set => set !== UNKNOWN_PRINTING_FILTER)
   const clauses: SQL[] = []
   if (setIds.length > 0) {
-    clauses.push(sql`${ownedCard.printingId} IN (
-      SELECT ${catalogPrinting.id} FROM ${catalogPrinting} WHERE ${inArray(catalogPrinting.setId, setIds)}
+    clauses.push(sql`EXISTS (
+      SELECT 1 FROM ${catalogPrinting}
+      WHERE ${catalogPrinting.cardId} = ${ownedCard.catalogCardId}
+        AND ${catalogPrinting.setCode} = ${ownedCard.setCode}
+        AND ${inArray(catalogPrinting.setId, setIds)}
     )`)
   }
   if (setIds.length < sets.length) {
-    clauses.push(isNull(ownedCard.printingId) as SQL)
+    clauses.push(isNull(ownedCard.setCode) as SQL)
   }
   return clauses.length === 1 ? clauses[0] : (or(...clauses) as SQL)
 }
@@ -242,9 +263,9 @@ export interface InventorySearchFacets {
   attributes: string[]
   races: string[]
   levels: number[]
-  /** The sets of the printings the user owns (ADR 0034), by name. */
+  /** The sets of the set codes the user owns (ADR 0034), by name. */
   sets: Array<{ id: string, name: string }>
-  /** Whether some stack has no printing, for the "printing unknown" option. */
+  /** Whether some stack has no set code, for the "printing unknown" option. */
   hasUnknownPrinting: boolean
 }
 
@@ -258,7 +279,7 @@ function uniqueSortedStrings(values: Array<string | null | undefined>): string[]
 
 /**
  * The filter options of the inventory search: the distinct catalog values
- * over every card the user owns, and the sets of the owned printings
+ * over every card the user owns, and the sets of the owned set codes
  * (ADR 0034). No language, condition or edition filters (ADR 0017).
  */
 export function loadInventorySearchFacets(db: Db, userId: string): InventorySearchFacets {
@@ -277,7 +298,10 @@ export function loadInventorySearchFacets(db: Db, userId: string): InventorySear
   const sets = db
     .selectDistinct({ id: catalogSet.id, name: catalogSet.name })
     .from(ownedCard)
-    .innerJoin(catalogPrinting, eq(ownedCard.printingId, catalogPrinting.id))
+    .innerJoin(catalogPrinting, and(
+      eq(catalogPrinting.cardId, ownedCard.catalogCardId),
+      eq(catalogPrinting.setCode, ownedCard.setCode),
+    ))
     .innerJoin(catalogSet, eq(catalogPrinting.setId, catalogSet.id))
     .where(eq(ownedCard.userId, userId))
     .all()
@@ -285,7 +309,7 @@ export function loadInventorySearchFacets(db: Db, userId: string): InventorySear
   const hasUnknownPrinting = db
     .select({ id: ownedCard.id })
     .from(ownedCard)
-    .where(and(eq(ownedCard.userId, userId), isNull(ownedCard.printingId)))
+    .where(and(eq(ownedCard.userId, userId), isNull(ownedCard.setCode)))
     .limit(1)
     .get() !== undefined
 

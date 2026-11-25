@@ -1,35 +1,30 @@
-/** One printing of a card (ADR 0034), as `GET /api/catalog/cards/:id/printings` returns it. */
-export interface CardPrinting {
-  id: string
-  setCode: string
-  setName: string
-  rarity: string | null
-  rarityCode: string | null
-}
+import type { CardSetCode } from '~~/shared/printing'
 
 /**
- * The printings of a card for the printing pickers, loaded on the client
- * whenever `cardId` changes. A failed load leaves the list empty: the
- * printing is optional, so the picker then only offers "printing unknown".
+ * The set codes of a card with their listed rarities (ADR 0034,
+ * `GET /api/catalog/cards/:id/printings`) for the printing pickers, loaded on
+ * the client whenever `cardId` changes. A failed load leaves the list empty:
+ * the printing is optional, so the picker then offers "set code unknown" and
+ * every rarity.
  */
 export function useCardPrintings(cardId: MaybeRefOrGetter<number | null | undefined>) {
-  const printings = ref<CardPrinting[]>([])
+  const setCodes = ref<CardSetCode[]>([])
   const loading = ref(false)
   let latest = 0
 
   watch(() => toValue(cardId), async (id) => {
     const request = ++latest
-    printings.value = []
+    setCodes.value = []
     if (import.meta.server || !id) {
       loading.value = false
       return
     }
     loading.value = true
     try {
-      const response = await $fetch<{ items?: CardPrinting[] }>(`/api/catalog/cards/${id}/printings`)
+      const response = await $fetch<{ items?: CardSetCode[] }>(`/api/catalog/cards/${id}/printings`)
       if (request === latest) {
-        // Anything but a list (an old cached answer) counts as no printings.
-        printings.value = Array.isArray(response?.items) ? response.items : []
+        // Anything but a list (an old cached answer) counts as no set codes.
+        setCodes.value = Array.isArray(response?.items) ? response.items : []
       }
     }
     catch {
@@ -42,5 +37,5 @@ export function useCardPrintings(cardId: MaybeRefOrGetter<number | null | undefi
     }
   }, { immediate: true })
 
-  return { printings, loading }
+  return { setCodes, loading }
 }

@@ -15,17 +15,18 @@ interface Row {
   collectionId: string | null
   quantity: number
   note: string | null
-  printingId?: string | null
+  setCode?: string | null
+  rarity?: string | null
 }
 
-// The card's printings (`GET /api/catalog/cards/:id/printings`, ADR 0034).
-const LOB = `${46986414}|LOB-005|UR`
-const SDY = `${46986414}|SDY-006|UR`
-const printings = [
-  { id: LOB, setCode: 'LOB-005', setName: 'Legend of Blue Eyes White Dragon', rarity: 'Ultra Rare', rarityCode: 'UR' },
-  { id: SDY, setCode: 'SDY-006', setName: 'Starter Deck: Yugi', rarity: 'Ultra Rare', rarityCode: 'UR' },
+// The card's set codes (`GET /api/catalog/cards/:id/printings`, ADR 0034).
+const setCodes = [
+  { setCode: 'LOB-005', setName: 'Legend of Blue Eyes White Dragon', rarities: ['ur'] },
+  { setCode: 'SDY-006', setName: 'Starter Deck: Yugi', rarities: ['ur'] },
 ]
-const printingFor = (id: string | null | undefined) => printings.find(printing => printing.id === id)
+const LOB = { setCode: 'LOB-005', rarity: 'ur' }
+const SDY = { setCode: 'SDY-006', rarity: 'ur' }
+const UNKNOWN = { setCode: null, rarity: null }
 
 interface Call {
   url: string
@@ -53,17 +54,15 @@ function fakeServer(initial: Row[]) {
   const fetch = vi.fn(async (url: string, options: { method?: string, body?: Record<string, unknown>, query?: unknown } = {}) => {
     const method = options.method ?? 'GET'
     if (method === 'GET' && url.endsWith('/printings')) {
-      return { items: printings }
+      return { items: setCodes }
     }
     if (method === 'GET') {
       return {
         items: rows.map(row => ({
           ...row,
           catalogCardId: CARD_ID,
-          printingId: row.printingId ?? null,
-          printingSetCode: printingFor(row.printingId)?.setCode ?? null,
-          printingRarity: printingFor(row.printingId)?.rarity ?? null,
-          printingRarityCode: printingFor(row.printingId)?.rarityCode ?? null,
+          setCode: row.setCode ?? null,
+          rarity: row.rarity ?? null,
         })),
         total: rows.length,
       }
@@ -429,36 +428,37 @@ describe('InventoryOwnedCardEditor', () => {
 
     it('shows each stack\'s printing, "unknown" ones first, and names it in the labels', async () => {
       const { component } = await mountEditor([
-        { id: 'r-sdy', collectionId: 'col-1', quantity: 1, note: null, printingId: SDY },
+        { id: 'r-sdy', collectionId: 'col-1', quantity: 1, note: null, ...SDY },
         { id: 'r-unknown', collectionId: 'col-1', quantity: 2, note: null },
-        { id: 'r-lob', collectionId: 'col-1', quantity: 1, note: null, printingId: LOB },
+        { id: 'r-lob', collectionId: 'col-1', quantity: 1, note: null, ...LOB },
       ])
 
       expect(rowIds(component)).toEqual(['r-unknown', 'r-lob', 'r-sdy'])
-      expect(printingSelects(component).map(select => select.props('modelValue'))).toEqual([null, LOB, SDY])
-      expect(printingSelects(component)[0]!.props('printings')).toEqual(printings)
+      expect(printingSelects(component).map(select => select.props('modelValue'))).toEqual([UNKNOWN, LOB, SDY])
+      expect(printingSelects(component)[0]!.props('setCodes')).toEqual(setCodes)
       // Two stacks in one collection stay apart in the controls' names.
       button('Anzahl in Box 1 · LOB-005 (UR)')
-      button('Printing ändern (Box 1 · SDY-006 (UR))')
-      button('Printing ändern (Box 1)')
+      button('Set-Code: Box 1 · SDY-006 (UR)')
+      button('Seltenheit: Box 1')
     })
 
     it('saves a picked printing at once and reports a merge into an existing stack', async () => {
       const { component, server, afterWrite } = await mountEditor([
         { id: 'r-unknown', collectionId: null, quantity: 2, note: null },
-        { id: 'r-lob', collectionId: null, quantity: 1, note: null, printingId: LOB },
+        { id: 'r-lob', collectionId: null, quantity: 1, note: null, ...LOB },
       ])
 
       await printingSelects(component)[0]!.vm.$emit('update:modelValue', SDY)
       await flushPromises()
-      expect(server.calls).toEqual([{ url: '/api/inventory/r-unknown', method: 'PATCH', body: { printingId: SDY } }])
+      // Set code and rarity in one request.
+      expect(server.calls).toEqual([{ url: '/api/inventory/r-unknown', method: 'PATCH', body: SDY }])
       expect(afterWrite).toHaveBeenCalledTimes(1)
 
       // Back to "unknown" … and then into the LOB-005 stack, which merges.
       server.state.mergeInto = 'r-lob'
-      await printingSelects(component).find(select => select.props('modelValue') === SDY)!.vm.$emit('update:modelValue', LOB)
+      await printingSelects(component).find(select => (select.props('modelValue') as typeof SDY).setCode === 'SDY-006')!.vm.$emit('update:modelValue', LOB)
       await flushPromises()
-      expect(server.calls.at(-1)).toEqual({ url: '/api/inventory/r-unknown', method: 'PATCH', body: { printingId: LOB } })
+      expect(server.calls.at(-1)).toEqual({ url: '/api/inventory/r-unknown', method: 'PATCH', body: LOB })
       expect(body().text()).toContain('Mit den Kopien in (keine Sammlung) zusammengelegt.')
       expect(rowIds(component)).toEqual(['r-lob'])
     })

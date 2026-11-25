@@ -304,7 +304,7 @@ describe('quick entry review row', () => {
       query: 'Dark Magician',
       quantity: 1,
       setCode: null,
-      printingId: null,
+      rarity: null,
       conflict: false,
       collectionId: null,
       candidates: [{

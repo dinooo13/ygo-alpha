@@ -32,8 +32,8 @@ const { t } = useI18n()
 
 const filters = defineModel<InventorySearchFilters>('filters', { required: true })
 
-// "Set / Printing": the sets the user owns printings of, and the copies
-// without a printing. Set names come from YGOPRODeck, English only. Hidden
+// "Set / Printing": the sets of the set codes the user owns, and the copies
+// without a set code. Set names come from YGOPRODeck, English only. Hidden
 // until some copy has a printing: "unknown" alone filters nothing useful.
 const setItems = computed(() => [
   ...(props.facets.hasUnknownPrinting ? [{ label: t('inventory.printing.unknown'), value: UNKNOWN_PRINTING_FILTER }] : []),

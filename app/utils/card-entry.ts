@@ -2,6 +2,8 @@
 // review flow (Roadmap Phase 2). Kept out of the components so the
 // preselection, status, and payload rules can be unit tested on their own.
 
+import type { CardSetCode } from '~~/shared/printing'
+
 export type EntryMatchedBy = 'passcode' | 'near_passcode' | 'set_code' | 'exact' | 'prefix' | 'contains' | 'fuzzy'
 
 export interface EntryCandidate {
@@ -15,18 +17,11 @@ export interface EntryCandidate {
   score: number
   matchedBy: EntryMatchedBy
   /**
-   * With a set code in the line: this card's printings under that code
-   * (ADR 0034), one per rarity.
+   * With a set code in the line: that set code as the catalog spells it, with
+   * the set name and the rarities YGOPRODeck lists for it (ADR 0034). Absent
+   * when this card has no printing under the code.
    */
-  printings?: EntryPrinting[]
-}
-
-export interface EntryPrinting {
-  id: string
-  setCode: string
-  setName: string
-  rarity: string | null
-  rarityCode: string | null
+  printing?: CardSetCode
 }
 
 export interface ParsedEntryLine {
@@ -47,14 +42,14 @@ export interface EntryRow {
   raw: string
   query: string
   quantity: number
-  /** The parsed set code; it finds the card and its printing (ADR 0034). */
+  /** The parsed set code; it finds the card and is saved with it (ADR 0034). */
   setCode: string | null
   /**
-   * The printing saved with the copies, `null` = printing unknown. Preselected
-   * when the set code has a single rarity for the selected card; with
-   * several, the row asks for the rarity (`needsRarity`).
+   * The rarity key saved with the copies, `null` = unknown. Preselected when
+   * YGOPRODeck lists a single rarity under the set code for the selected
+   * card; with several, the row asks for it (`needsRarity`).
    */
-  printingId: string | null
+  rarity: string | null
   candidates: EntryCandidate[]
   selectedCardId: number | null
   /** Set code and name pointed at different cards — never auto-selected. */
@@ -76,8 +71,9 @@ export interface EntryBulkEntry {
 export interface EntryBulkItem {
   catalogCardId: number
   collectionId: string | null
-  /** Only sent with a printing (ADR 0034). */
-  printingId?: string
+  /** Only sent when known (ADR 0034). */
+  setCode?: string
+  rarity?: string
   quantity: number
 }
 
@@ -131,22 +127,23 @@ export function hasMatchConflict(candidates: EntryCandidate[]): boolean {
  * before anything is written.
  */
 /**
- * The printing a row starts with for its selected card: the only printing
- * under the parsed set code, else none (several rarities: the user picks).
+ * The rarity a row starts with for its selected card: the only rarity
+ * YGOPRODeck lists under the parsed set code, else none (several: the user
+ * picks; none: the user may pick any).
  */
-export function defaultPrintingId(candidate: EntryCandidate | undefined): string | null {
-  const printings = candidate?.printings ?? []
-  return printings.length === 1 ? printings[0]!.id : null
+export function defaultRarity(candidate: EntryCandidate | undefined): string | null {
+  const rarities = candidate?.printing?.rarities ?? []
+  return rarities.length === 1 ? rarities[0]! : null
 }
 
-/** The selected card's printings under the parsed set code (ADR 0034). */
-export function rowPrintings(row: EntryRow): EntryPrinting[] {
-  return selectedCandidate(row)?.printings ?? []
+/** The selected card's set code from the line, with its rarities (ADR 0034). */
+export function rowPrinting(row: EntryRow): CardSetCode | undefined {
+  return selectedCandidate(row)?.printing
 }
 
 /** The set code has several rarities for the selected card and none is picked yet. */
 export function needsRarity(row: EntryRow): boolean {
-  return row.printingId === null && rowPrintings(row).length > 1
+  return row.rarity === null && (rowPrinting(row)?.rarities.length ?? 0) > 1
 }
 
 export function createEntryRow(result: EntrySuggestResult): EntryRow {
@@ -162,7 +159,7 @@ export function createEntryRow(result: EntrySuggestResult): EntryRow {
     query: result.input.query,
     quantity: result.input.quantity,
     setCode,
-    printingId: defaultPrintingId(preselected),
+    rarity: defaultRarity(preselected),
     candidates: result.candidates,
     selectedCardId: preselected?.cardId ?? null,
     collectionId: null,
@@ -223,6 +220,15 @@ export function effectiveCollectionId(row: EntryRow, defaults: EntryDefaults): s
   return collectionId === NO_COLLECTION_VALUE ? null : collectionId
 }
 
+// The set code as the catalog spells it, for the selected card only.
+function printingFields(row: EntryRow): Pick<EntryBulkItem, 'setCode' | 'rarity'> {
+  const setCode = rowPrinting(row)?.setCode
+  return {
+    ...(setCode ? { setCode } : {}),
+    ...(row.rarity ? { rarity: row.rarity } : {}),
+  }
+}
+
 /**
  * Builds the `/api/inventory/bulk` payload from all resolved rows, keeping
  * each item tied to its row id so a per-item error can be pointed back at
@@ -234,7 +240,7 @@ export function buildBulkEntries(rows: EntryRow[], defaults: EntryDefaults): Ent
     item: {
       catalogCardId: row.selectedCardId!,
       collectionId: effectiveCollectionId(row, defaults),
-      ...(row.printingId ? { printingId: row.printingId } : {}),
+      ...printingFields(row),
       quantity: row.quantity,
     },
   }))

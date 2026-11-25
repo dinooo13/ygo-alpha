@@ -1,6 +1,8 @@
 import { and, asc, count, desc, eq, isNotNull, ne, sql } from 'drizzle-orm'
 import type { useDb } from '../db'
 import { catalogCard, catalogCardImage, catalogPrinting, catalogSet } from '../db/schema'
+import type { CardSetCode } from '../../shared/printing'
+import { RARITIES } from '../../shared/rarity'
 import type { AppLocale } from '../../shared/locale'
 import { activeCatalogCard } from './card-name-search'
 import { resolveCatalogCardId } from './card-passcode'
@@ -88,7 +90,7 @@ export function listCardPrintings(db: Db, cardId: number) {
       setCode: catalogPrinting.setCode,
       setName: catalogSet.name,
       rarity: catalogPrinting.rarity,
-      rarityCode: catalogPrinting.rarityCode,
+      rarityKey: catalogPrinting.rarityKey,
       price: catalogPrinting.price,
     })
     .from(catalogPrinting)
@@ -96,6 +98,29 @@ export function listCardPrintings(db: Db, cardId: number) {
     .where(eq(catalogPrinting.cardId, cardId))
     .orderBy(asc(catalogSet.name), asc(catalogPrinting.setCode), asc(catalogPrinting.rarity))
     .all()
+}
+
+/**
+ * A card's set codes with the rarities YGOPRODeck lists for each (ADR 0034),
+ * by set code: the suggestions of the inventory's printing pickers. Entries
+ * that name no known rarity ("New", "2") add the set code without a rarity.
+ */
+export function listCardSetCodes(db: Db, cardId: number): CardSetCode[] {
+  const bySetCode = new Map<string, { setName: string, rarities: Set<string> }>()
+  for (const printing of listCardPrintings(db, cardId)) {
+    const entry = bySetCode.get(printing.setCode) ?? { setName: printing.setName, rarities: new Set<string>() }
+    if (printing.rarityKey) {
+      entry.rarities.add(printing.rarityKey)
+    }
+    bySetCode.set(printing.setCode, entry)
+  }
+  return [...bySetCode]
+    .map(([setCode, { setName, rarities }]) => ({
+      setCode,
+      setName,
+      rarities: RARITIES.filter(rarity => rarities.has(rarity.key)).map(rarity => rarity.key),
+    }))
+    .sort((a, b) => a.setCode.localeCompare(b.setCode))
 }
 
 export async function getCatalogCardDetail(db: Db, id: number) {

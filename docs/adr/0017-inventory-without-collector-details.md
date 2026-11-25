@@ -5,9 +5,9 @@
 Accepted
 
 Partly superseded by [0034](0034-inventory-printings.md) for the printing
-only (decisions 1, 2 and 4): a stack can carry its printing again, and the
-grain is `(user_id, catalog_card_id, collection_id, printing_id)`. Language,
-condition and edition stay out.
+only (decisions 1, 2 and 4): a stack can carry its set code and rarity
+again, and the grain is `(user_id, catalog_card_id, collection_id, set_code,
+rarity)`. Language, condition and edition stay out.
 
 Supersedes the collector parts of [0002](0002-owned-card-inventory-data-model.md):
 the owned-card grain tuple, the validation of language, condition and edition,

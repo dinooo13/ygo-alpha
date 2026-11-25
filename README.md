@@ -48,7 +48,7 @@ every deck as you build it. The assistant plans with the cards in your binder, n
 Paste or type a list, one card per line: `3x Dark Magician`, `Pot of Greed x2`, `Blue-Eyes White Dragon (SDK-001)`,
 or the 8-digit passcode from the card. Quick entry matches each line to the catalog, shows how sure the match
 is, catches typos, and saves nothing until you've checked the list. A set code also keeps the printing; when
-the code comes in several rarities, quick entry asks which one you have. To add a card from a photo, send the photo
+the code comes in several rarities, quick entry asks which one you have, and any other rarity is one click away. To add a card from a photo, send the photo
 to the assistant.
 
 ### Every card, one search away

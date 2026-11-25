@@ -109,7 +109,7 @@ describe('primary artwork (ADR 0025)', () => {
   })
 
   it('shows it in the inventory list, the card picker and the inventory search display', async () => {
-    await addOwnedCard(db, USER, { catalogCardId: DARK_MAGICIAN, collectionId: null, printingId: null, quantity: 2, note: null })
+    await addOwnedCard(db, USER, { catalogCardId: DARK_MAGICIAN, collectionId: null, setCode: null, rarity: null, quantity: 2, note: null })
 
     const owned = listOwnedCards(db, USER)
     expect(owned.items).toHaveLength(1)
@@ -142,7 +142,7 @@ describe('primary artwork (ADR 0025)', () => {
     expect(view.sections.main).toHaveLength(1)
     expect(view.sections.main[0]).toMatchObject({ imageSmall: small(DARK_MAGICIAN), imageLarge: large(DARK_MAGICIAN) })
 
-    await addOwnedCard(db, USER, { catalogCardId: DARK_MAGICIAN, collectionId: null, printingId: null, quantity: 2, note: null })
+    await addOwnedCard(db, USER, { catalogCardId: DARK_MAGICIAN, collectionId: null, setCode: null, rarity: null, quantity: 2, note: null })
     const list = listSharedInventory(db, USER, {})
     expect(list.items).toHaveLength(1)
     expect(list.items[0]).toMatchObject({ imageSmall: small(DARK_MAGICIAN), imageLarge: large(DARK_MAGICIAN) })

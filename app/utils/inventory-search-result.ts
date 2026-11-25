@@ -8,12 +8,13 @@ export interface InventoryCollectionBreakdown {
   quantity: number
 }
 
-/** A known printing behind a "Galerie" tile and its copies (ADR 0034). */
+/**
+ * A known printing behind a "Galerie" tile (set code and/or rarity key, ADR
+ * 0034) and its copies.
+ */
 export interface InventoryPrintingBreakdown {
-  printingId: string
-  setCode: string
+  setCode: string | null
   rarity: string | null
-  rarityCode: string | null
   quantity: number
 }
 
@@ -36,7 +37,7 @@ export interface InventorySearchResultItem {
   retired?: boolean
   totalQuantity: number
   collectionBreakdown?: InventoryCollectionBreakdown[]
-  /** Known printings only; copies without a printing are not listed. */
+  /** Known printings only; copies without set code and rarity are not listed. */
   printingBreakdown?: InventoryPrintingBreakdown[]
 }
 

@@ -1,18 +1,13 @@
--- #176 (ADR 0034): printings come back to the inventory.
--- No table rebuild: `owned_card.printing_id` keeps its foreign key to
--- `catalog_printing(id)` (table-level clause from 0002), and `id` stays the
--- primary key of `catalog_printing`; only its values change. A rebuild of
--- either table would run inside the migrator's transaction, where
--- `PRAGMA foreign_keys=OFF` has no effect (see 0017).
-ALTER TABLE `catalog_printing` ADD `rarity_code` text;--> statement-breakpoint
-CREATE INDEX `idx_owned_card_printing` ON `owned_card` (`printing_id`);--> statement-breakpoint
--- Re-key the existing printings from the bare set code to
--- `<card id>|<set code>|<rarity>` (`printingKey`, shared/printing.ts). The
--- rarity code is not known yet, so the rarity name stands in, which is the
--- key the sync gives a printing without a rarity code. The next catalog sync
--- adds every printing under its final key and prunes the rest. Printings an
--- owned card references are left alone (ADR 0017 kept `printing_id` NULL, so
--- there are none); re-keying them would break the foreign key.
-UPDATE `catalog_printing`
-SET `id` = `card_id` || '|' || trim(`set_code`) || '|' || coalesce(trim(`rarity`), '')
-WHERE `id` NOT IN (SELECT `printing_id` FROM `owned_card` WHERE `printing_id` IS NOT NULL);
+-- #176 (ADR 0034): an owned stack records the set code and the rarity of its
+-- copies, both optional and part of the stack's identity; `catalog_printing`
+-- gets the rarity key YGOPRODeck's rarity text maps to.
+-- Plain ADD COLUMN and CREATE INDEX, no table rebuild (a rebuild would run
+-- inside the migrator's transaction, where `PRAGMA foreign_keys=OFF` has no
+-- effect; see 0017). Existing rows keep NULL ("unknown"). The printings keep
+-- their old ids (the bare set code) until the next catalog sync adds them
+-- under `<card id>|<set code>|<rarity>` and prunes the old rows; nothing
+-- references them (`owned_card.printing_id` has been NULL since ADR 0017).
+ALTER TABLE `catalog_printing` ADD `rarity_key` text;--> statement-breakpoint
+ALTER TABLE `owned_card` ADD `set_code` text;--> statement-breakpoint
+ALTER TABLE `owned_card` ADD `rarity` text;--> statement-breakpoint
+CREATE INDEX `idx_owned_card_set_code` ON `owned_card` (`catalog_card_id`,`set_code`);
