@@ -552,7 +552,7 @@ pnpm preview
 
 `compose.yaml` builds the image from your checkout and runs it; there is no published image to pull. You need Docker Compose 2.24 or newer (`docker compose version`). The build compiles the app and the SQLite driver, so it needs a few GB of RAM and takes a while, noticeably longer on small or ARM NAS models. CI builds the image and runs it on amd64 and arm64 for every change (`.github/workflows/docker.yml`, `scripts/docker-smoke.sh`).
 
-**The URL rule:** set `NUXT_PUBLIC_BETTER_AUTH_URL` to exactly the URL people open in the browser, with scheme, host and port, for example `http://192.168.1.10:8080` or `https://ygo.example.com`. Better Auth refuses sign-in and sign-up from any other origin with HTTP 403. The default, `http://localhost:<YGO_ALPHA_PORT>`, only works in a browser on the Docker host itself. If people reach the app under more than one address, put the others in `BETTER_AUTH_TRUSTED_ORIGINS` in `.env` (comma-separated, e.g. `http://192.168.1.10:8080,https://ygo.example.com`). With an `https://` URL the login cookie is marked Secure, so the browser only sends it over HTTPS (behind a reverse proxy).
+**The URL rule:** set `NUXT_PUBLIC_BETTER_AUTH_URL` to exactly the URL people open in the browser, with scheme, host and port, for example `http://192.168.1.10:8080` or `https://ygo.example.com`. Better Auth refuses sign-in and sign-up from any other origin with HTTP 403. The default, `http://localhost:<YGO_ALPHA_PORT>`, only works in a browser on the Docker host itself. If people reach the app under more than one address, put the others in `BETTER_AUTH_TRUSTED_ORIGINS` in `.env` (comma-separated, no spaces, no trailing slash, e.g. `http://192.168.1.10:8080,https://ygo.example.com`). With an `https://` URL the login cookie is marked Secure, so the browser only sends it over HTTPS (behind a reverse proxy). Over plain HTTP on a LAN address, the app works, but browsers turn off what needs a secure context: offline use and installing the app (the service worker), and copying links to the clipboard. For those, put it behind HTTPS (a reverse proxy) or open it as `localhost`.
 
 Start it from the checkout:
 
@@ -581,7 +581,7 @@ Then load the catalog once, as in the [README](../README.md#get-started) (on you
 
 **The data folder:** the app has to be able to write it. Docker creates a missing folder as root, which the app's user can't write, so create the folder before the first start and either give it to the image's user (`sudo chown 1001:1001 <folder>`) or set `YGO_ALPHA_USER` to the folder owner's `uid:gid`. The app creates `app.db` and applies the migrations when it starts. Keep the folder on a local disk: SQLite on a network share (NFS, SMB) can corrupt the database. For a backup, copy `app.db` while the container is stopped.
 
-**Synology (DSM, Container Manager):** over SSH on the NAS (Control Panel → Terminal & SNMP → Enable SSH service), as your own user, put the checkout in `/volume1/docker/ygo-alpha` (with `git`, for example from the Git Server package, or unpack the source ZIP from GitHub there). Replace `192.168.1.10` with the address of your NAS:
+**Synology (DSM, Container Manager):** over SSH on the NAS (Control Panel → Terminal & SNMP → Enable SSH service), as your own user, put the checkout in `/volume1/docker/ygo-alpha` (with `git`, for example from the Git Server package, or unpack the source ZIP from GitHub there). Check `sudo docker compose version` first: Container Manager has shipped Compose versions older than 2.24, which can't read this `compose.yaml`; in that case use the `docker run` sketch below. Replace `192.168.1.10` with the address of your NAS:
 
 ```bash
 cd /volume1/docker/ygo-alpha
@@ -600,7 +600,7 @@ sudo docker compose up --build -d
 
 `id -u` and `id -g` print your user's ids (often something like `1026` and `100`); `mkdir` made you the owner of `data`, so the app can write it without a `chown`. The app is then at `http://192.168.1.10:8080`.
 
-**Updating:**
+**Updating:** pull the new version (`git pull`, or unpack the new source ZIP over the checkout, keeping `.env` and `data/`), then rebuild (on Synology with `sudo`):
 
 ```bash
 git pull

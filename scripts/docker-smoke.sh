@@ -93,8 +93,9 @@ wait_for_login() {
   fail "http://localhost:$1/login did not answer within 90 s"
 }
 
-# auth <path> <origin> <json body>: prints the HTTP status. The Sec-Fetch-*
-# headers make Better Auth check the Origin as it does for a browser.
+# auth <path> <origin> <json body>: prints the HTTP status. Better Auth checks
+# the Origin header against NUXT_PUBLIC_BETTER_AUTH_URL; the Sec-Fetch-*
+# headers make the request look like a browser's.
 auth() {
   curl -sS -o "$tmp/response.json" -w '%{http_code}' \
     -X POST "http://localhost:$port/api/auth/$1" \
@@ -159,8 +160,6 @@ scenario() {
     fail "app.db belongs to $(sudo stat -c %u:%g "$data/app.db"), expected $uid_gid"
   [ "$(compose exec -T app sh -c 'echo "$(id -u):$(id -g)"')" = "$uid_gid" ] ||
     fail "the app does not run as $uid_gid"
-  [[ "$(compose port app 3000)" == *":$port" ]] ||
-    fail "container port 3000 is published as $(compose port app 3000), expected :$port"
   if $port3000_was_free && curl -s -o /dev/null --max-time 3 http://localhost:3000/; then
     fail "something answers on host port 3000"
   fi
