@@ -4,8 +4,8 @@
 // needs the server's E2E catalog fixture (NUXT_E2E_SEED_CATALOG=1) and open
 // sign-up (NUXT_INVITE_CODE empty, or pass --invite-code).
 //
-// Idempotent: when the demo account already has decks, it only logs in and
-// prints the credentials again.
+// Idempotent: when the demo account already has a tournament (the last step),
+// it only logs in and prints the credentials again.
 
 import { parseArgs } from 'node:util'
 
@@ -253,9 +253,12 @@ async function seedTournament(deckId) {
   return tournament
 }
 
+let loggedIn = false
 try {
   const created = await login()
-  // The tournament is created last, so it marks a complete seed.
+  loggedIn = true
+  // The tournament is the seed's last step. A run that failed inside that
+  // step leaves one behind, so after a failure start over (see below).
   const seeded = !created && (await api('GET', '/api/tournaments')).data.items.length > 0
   if (seeded) {
     console.log(`seed-demo: ${BASE} already has the demo account; nothing to do`)
@@ -269,7 +272,9 @@ try {
 }
 catch (error) {
   console.error(`seed-demo: ${error.message}`)
-  console.error('  after a failed run: stop the server, delete .agent/, start it again and rerun')
+  if (loggedIn) {
+    console.error('  data may be half written: stop the server, delete .agent/, start it again and rerun')
+  }
   if (error.cause?.code === 'ECONNREFUSED') {
     console.error(`  is the server running? start it with: PORT=${new URL(BASE).port || 80} pnpm dev:agent`)
   }
