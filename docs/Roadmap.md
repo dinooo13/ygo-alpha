@@ -267,6 +267,17 @@ Tester-Feedback Sept 2026:
 - [x] Quick capture reads deck lists and no longer turns header lines ("Monster", "Zauber", "#main",
   "Extra Deck") into card rows; equal entries are merged before the 50-line cap.
 
+Tester-Feedback Nov 2026 (#178): the deck builder puts cards on the wishlist and into the
+inventory without the detour through the catalog.
+
+- [x] "Zum Inventar" and "Zur Wunschliste" in every deck row's "…" menu (Main, Extra, Side) and
+  in the card overlay's footer: the inventory dialog starts at the deck's shortfall, the wishlist
+  wishes for it (at least 1) and a second click takes the card off again, as in the catalog; a
+  wished card shows "Auf der Wunschliste" on its rows.
+- [x] "Fehlende Karten auf die Wunschliste" in the deck's "…" menu: a confirm dialog lists every
+  card the whole deck is short of with the missing count and puts them on the wishlist with it;
+  cards already there are marked and skipped, so their quantity and note stay.
+
 ### Phase 4: Rule Formats and Deck Validation
 
 Goal: Support flexible deck legality checks for official and custom formats.

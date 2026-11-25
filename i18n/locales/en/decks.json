@@ -156,6 +156,20 @@
         "quantity": "Copies in the {section}",
         "decrease": "One copy fewer in the {section}",
         "increase": "One more copy in the {section}"
+      },
+      "missingToWishlist": {
+        "menu": "Add missing cards to wishlist",
+        "title": "Add missing cards to wishlist",
+        "description": "The cards you own fewer copies of than the deck needs (Main, Extra and Side). They go on your wishlist with the number you are missing.",
+        "listLabel": "Missing cards",
+        "missingCount": "{count} missing | {count} missing",
+        "alreadyWished": "already on your wishlist",
+        "skipHint": "Cards already on your wishlist stay as they are.",
+        "allWished": "Every missing card is already on your wishlist.",
+        "nothingMissing": "You own every card this deck needs.",
+        "confirm": "Add {count} card to wishlist | Add {count} cards to wishlist",
+        "success": "Added {count} card to your wishlist | Added {count} cards to your wishlist",
+        "failed": "Couldn't update the wishlist."
       }
     },
     "breakdown": {

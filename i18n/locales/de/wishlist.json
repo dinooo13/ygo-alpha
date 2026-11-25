@@ -13,11 +13,13 @@
       "cta": "Zum Katalog"
     },
     "toast": {
-      "removed": "Von der Wunschliste entfernt"
+      "removed": "Von der Wunschliste entfernt",
+      "added": "{name} auf die Wunschliste gesetzt ({count} Exemplar) | {name} auf die Wunschliste gesetzt ({count} Exemplare)"
     },
     "button": {
       "add": "Zur Wunschliste",
-      "onList": "Auf der Wunschliste"
+      "onList": "Auf der Wunschliste",
+      "remove": "Von der Wunschliste entfernen"
     },
     "row": {
       "owned": "Besitz: {count}",

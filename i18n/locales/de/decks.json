@@ -156,6 +156,20 @@
         "quantity": "Kopien im {section}",
         "decrease": "Eine Kopie weniger im {section}",
         "increase": "Eine Kopie mehr im {section}"
+      },
+      "missingToWishlist": {
+        "menu": "Fehlende Karten auf die Wunschliste",
+        "title": "Fehlende Karten auf die Wunschliste",
+        "description": "Die Karten, von denen du weniger besitzt, als das Deck braucht (Main, Extra und Side). Sie kommen mit der fehlenden Anzahl auf die Wunschliste.",
+        "listLabel": "Fehlende Karten",
+        "missingCount": "{count} fehlt | {count} fehlen",
+        "alreadyWished": "schon auf der Wunschliste",
+        "skipHint": "Karten, die schon auf der Wunschliste stehen, bleiben, wie sie sind.",
+        "allWished": "Alle fehlenden Karten sind schon auf der Wunschliste.",
+        "nothingMissing": "Dir fehlt keine Karte für dieses Deck.",
+        "confirm": "{count} Karte auf die Wunschliste | {count} Karten auf die Wunschliste",
+        "success": "{count} Karte auf die Wunschliste gesetzt | {count} Karten auf die Wunschliste gesetzt",
+        "failed": "Die Wunschliste konnte nicht aktualisiert werden."
       }
     },
     "breakdown": {

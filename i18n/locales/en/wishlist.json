@@ -13,11 +13,13 @@
       "cta": "Go to the catalog"
     },
     "toast": {
-      "removed": "Removed from your wishlist"
+      "removed": "Removed from your wishlist",
+      "added": "Added {name} to your wishlist ({count} copy) | Added {name} to your wishlist ({count} copies)"
     },
     "button": {
       "add": "Add to wishlist",
-      "onList": "On your wishlist"
+      "onList": "On your wishlist",
+      "remove": "Remove from wishlist"
     },
     "row": {
       "owned": "Owned: {count}",

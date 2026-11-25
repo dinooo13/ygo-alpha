@@ -14,8 +14,9 @@ import { CARD_KINDS } from '~~/shared/card-kind'
 import { UNASSIGNED_COLLECTION_ID } from '~~/shared/inventory'
 import { deckBreakdownGroups } from '~~/shared/deck-breakdown'
 import { compareDeckRows } from '~~/shared/deck-order'
-import type { CardDetailPreview } from '~/utils/card-detail'
+import type { CardDetailPreview, CardDetailSummary } from '~/utils/card-detail'
 import { deckCountState, deckMeterFill } from '~/utils/deck-meter'
+import { missingCards, wishlistQuantity } from '~/utils/deck-shortfall'
 
 interface DeckCardRow {
   catalogCardId: number
@@ -190,7 +191,7 @@ function sourceItemId(item: SourceItem): number {
 // One endpoint at a time: the owned-cards search by default, the full catalog
 // when the user wants to plan with cards they do not own yet (those come back
 // with `owned: 0`, so the deck shows a shortfall).
-const { data: sourceData, pending: sourcePending } = await useFetch<SourcePage>(() => sourceEndpoint(includeCatalog.value), {
+const { data: sourceData, pending: sourcePending, refresh: refreshSource } = await useFetch<SourcePage>(() => sourceEndpoint(includeCatalog.value), {
   query: sourceQuery,
   headers: import.meta.server ? useRequestHeaders(['cookie']) : undefined,
   default: () => ({ items: [], total: 0 }),
@@ -203,7 +204,7 @@ const catalogCardIds = computed(() => (includeCatalog.value
   ? (sourceData.value?.items ?? []).map(item => (item as CatalogSearchItem).id).filter(Boolean)
   : []))
 
-const { data: ownedQuantities } = await useFetch<Record<string, number>>('/api/inventory/owned-quantities', {
+const { data: ownedQuantities, refresh: refreshOwnedQuantities } = await useFetch<Record<string, number>>('/api/inventory/owned-quantities', {
   query: computed(() => ({ ids: catalogCardIds.value.join(',') })),
   headers: import.meta.server ? useRequestHeaders(['cookie']) : undefined,
   default: () => ({}),
@@ -215,6 +216,16 @@ const { data: facets } = await useFetch<SearchFacets>('/api/inventory/search/fac
   headers: import.meta.server ? useRequestHeaders(['cookie']) : undefined,
   default: () => ({ types: [], attributes: [] }),
 })
+
+// --- Wishlist (#178) ----------------------------------------------------------
+
+// The catalog's toggle state (#98): the row menus, the rows' badges and the
+// card overlay show the same state.
+const { data: wishlistIds, refresh: refreshWishlistIds } = await useFetch<{ ids: number[] }>('/api/wishlist/ids', {
+  headers: import.meta.server ? useRequestHeaders(['cookie']) : undefined,
+  default: () => ({ ids: [] }),
+})
+const wishlist = useWishlistToggle(computed(() => wishlistIds.value?.ids ?? []))
 
 // --- Rule format + live validation ----------------------------------------
 
@@ -335,7 +346,7 @@ const typeSelection = computed({
   },
 })
 // "Quelle": all collections, the copies without one, or one collection.
-const { data: collectionsData } = await useCollections()
+const { data: collectionsData, refresh: refreshCollections } = await useCollections()
 const sourceOptions = computed(() => [
   { label: t('decks.editor.addPanel.sourceAll'), value: ALL_SOURCES },
   { label: t('decks.editor.addPanel.sourceNone'), value: UNASSIGNED_COLLECTION_ID },
@@ -841,7 +852,119 @@ const inactiveCoverActions = computed(() => [{
   onClick: () => setCover(null),
 }])
 
+// --- Wishlist and inventory from the deck (#178) ----------------------------
+
+const toast = useToast()
+
+/** The card to put on the wishlist or into the inventory. */
+type WantedCard = Pick<DeckCardRow, 'catalogCardId' | 'name' | 'nameDe' | 'type'>
+
+/** The copies the whole deck needs beyond the owned ones; 0 for a card not in the deck. */
+function shortfallFor(catalogCardId: number, owned: number): number {
+  return Math.max(0, (usedByCard.value.get(catalogCardId) ?? 0) - owned)
+}
+
+// "Zur Wunschliste" from a row menu wishes for the deck's shortfall (at
+// least 1); once wished, the item removes the card again, as the catalog's
+// toggle does. A menu has no place for an inline error, so both ends are toasts.
+async function toggleWishlist(card: WantedCard, shortfall: number) {
+  const id = card.catalogCardId
+  const adding = !wishlist.isWishlisted(id)
+  const quantity = wishlistQuantity(shortfall)
+  await wishlist.toggle(id, quantity)
+  const failed = wishlist.errorFor(id)
+  if (failed) {
+    toast.add({ title: failed, color: 'error' })
+    return
+  }
+  // Ignored: the card was still saving.
+  if (wishlist.isWishlisted(id) !== adding) {
+    return
+  }
+  toast.add(adding
+    ? { title: t('wishlist.toast.added', { name: cardName(card), count: n(quantity, 'integer') }, quantity), icon: 'i-lucide-heart', color: 'success' }
+    : { title: t('wishlist.toast.removed'), icon: 'i-lucide-heart-off' })
+}
+
+// "Zum Inventar": the catalog's add dialog, prefilled with the shortfall.
+// From the overlay it opens on top of it, as in the catalog.
+const isAddToInventoryOpen = ref(false)
+const addingCard = ref<CardDetailSummary | null>(null)
+const addingQuantity = ref(1)
+
+function openAddToInventory(card: WantedCard, shortfall: number) {
+  addingCard.value = { id: card.catalogCardId, name: card.name, nameDe: card.nameDe ?? null, type: card.type }
+  addingQuantity.value = Math.max(1, shortfall)
+  isAddToInventoryOpen.value = true
+}
+
+// A card not in the deck has no row with a fresh owned total: ask for it.
+async function refreshOverlayOwned(catalogCardId: number | undefined) {
+  const card = overlayCard.value
+  if (!card || card.id !== catalogCardId) {
+    return
+  }
+  try {
+    const owned = await $fetch<Record<string, number>>('/api/inventory/owned-quantities', { query: { ids: String(card.id) } })
+    if (overlayCard.value?.id === card.id) {
+      overlayCard.value = { ...overlayCard.value, owned: owned[String(card.id)] ?? overlayCard.value.owned }
+    }
+  }
+  catch {
+    // Keeps the earlier total; the deck rows' total wins where there is one.
+  }
+}
+
+// The owned totals changed: the deck reloads through the queue (as
+// `onDeckSaved`), so "3/2" becomes "3/3"; the add panel starts again at
+// page 1 with fresh counts, and the collections' copy counts follow.
+async function onAddedToInventory() {
+  const addedId = addingCard.value?.id
+  resetSourcePaging()
+  await Promise.all([
+    writeDeck(() => $fetch<DeckDetail>(`/api/decks/${deckId.value}`)),
+    refreshSource(),
+    refreshOwnedQuantities(),
+    refreshCollections(),
+    refreshOverlayOwned(addedId),
+  ])
+}
+
+const overlayWanted = computed<WantedCard | null>(() => {
+  const card = overlayCard.value
+  return card ? { catalogCardId: card.id, name: card.preview.name, nameDe: card.preview.nameDe ?? null, type: card.preview.type } : null
+})
+const overlayShortfall = computed(() => (overlayCard.value ? shortfallFor(overlayCard.value.id, overlayOwned.value) : 0))
+
+function toggleOverlayWishlist() {
+  const card = overlayCard.value
+  if (card) {
+    wishlist.toggle(card.id, wishlistQuantity(overlayShortfall.value))
+  }
+}
+
+// "Fehlende Karten auf die Wunschliste": the whole deck's shortfall, from
+// the shown (optimistic) rows, with the wishlist state.
+const deckMissing = computed(() => missingCards(sections.value, id => wishlist.isWishlisted(id)))
+const isMissingToWishlistOpen = ref(false)
+
+async function onMissingAddedToWishlist() {
+  await refreshWishlistIds()
+}
+
 function rowMenuItems(row: DeckCardRow) {
+  const shortfall = rowUsage(row).shortfall
+  const wished = wishlist.isWishlisted(row.catalogCardId)
+  const ownItems = [
+    { label: t('catalog.addToInventory'), icon: 'i-lucide-archive-restore', onSelect: () => openAddToInventory(row, shortfall) },
+    {
+      label: wished ? t('wishlist.button.remove') : t('wishlist.button.add'),
+      icon: wished ? 'i-lucide-heart-off' : 'i-lucide-heart',
+      disabled: wishlist.isSaving(row.catalogCardId),
+      onSelect: () => toggleWishlist(row, shortfall),
+    },
+  ]
+
   const moveItems = DECK_SECTIONS
     .filter(section => section !== row.section)
     .map(section => ({
@@ -853,7 +976,7 @@ function rowMenuItems(row: DeckCardRow) {
 
   // Side Deck cards are never a cover.
   if (row.section === 'side') {
-    return [moveItems]
+    return [moveItems, ownItems]
   }
 
   // A rule-picked cover row still offers "festlegen", to pin it.
@@ -861,7 +984,7 @@ function rowMenuItems(row: DeckCardRow) {
     ? { label: t('decks.editor.row.coverAuto'), icon: 'i-lucide-image-off', onSelect: () => setCover(null) }
     : { label: t('decks.editor.row.coverSet'), icon: 'i-lucide-image', onSelect: () => setCover(row.catalogCardId) }
 
-  return [moveItems, [coverItem]]
+  return [moveItems, [coverItem], ownItems]
 }
 
 // Through the queue, so the reload can't overwrite a pending write's answer.
@@ -900,6 +1023,12 @@ async function deleteDeck() {
 // toolbar stays one short row and the title keeps its full width (#40).
 const deckMenuItems = computed(() => [
   [{ label: t('decks.menu.rename'), icon: 'i-lucide-pencil', onSelect: () => { isFormOpen.value = true } }],
+  [{
+    label: t('decks.editor.missingToWishlist.menu'),
+    icon: 'i-lucide-heart',
+    disabled: deckMissing.value.length === 0,
+    onSelect: () => { isMissingToWishlistOpen.value = true },
+  }],
   [{ label: t('common.delete'), icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: deleteDeck }],
 ])
 
@@ -1161,7 +1290,7 @@ const loadErrorDescription = computed(() => (error.value ? apiError(error.value,
                     {{ cardMetaLine(row) }}
                   </p>
                   <div
-                    v-if="statusLabelFor(row.catalogCardId) || isCoverRow(row) || row.retired"
+                    v-if="statusLabelFor(row.catalogCardId) || isCoverRow(row) || row.retired || wishlist.isWishlisted(row.catalogCardId)"
                     class="relative z-10 mt-0.5 flex w-fit flex-wrap gap-1"
                   >
                     <CardRetiredBadge v-if="row.retired" />
@@ -1180,6 +1309,15 @@ const loadErrorDescription = computed(() => (error.value ? apiError(error.value,
                       color="primary"
                       icon="i-lucide-image"
                       :label="deck.coverIsChosen ? t('decks.editor.cover.chosen') : t('decks.editor.cover.auto')"
+                    />
+                    <UBadge
+                      v-if="wishlist.isWishlisted(row.catalogCardId)"
+                      size="sm"
+                      variant="subtle"
+                      color="neutral"
+                      icon="i-lucide-heart"
+                      :label="t('wishlist.button.onList')"
+                      data-testid="row-wishlisted"
                     />
                   </div>
                 </div>
@@ -1490,7 +1628,40 @@ const loadErrorDescription = computed(() => (error.value ? apiError(error.value,
             @set="setOverlayQuantity"
           />
         </template>
+        <!-- The catalog's actions (#178); the deck itself is edited above. -->
+        <template #actions>
+          <UButton
+            icon="i-lucide-archive-restore"
+            color="primary"
+            :label="t('catalog.addToInventory')"
+            :disabled="!overlayWanted"
+            class="tap-target"
+            @click="overlayWanted ? openAddToInventory(overlayWanted, overlayShortfall) : undefined"
+          />
+          <WishlistAddToWishlistButton
+            v-if="overlayCard"
+            :in-wishlist="wishlist.isWishlisted(overlayCard.id)"
+            :loading="wishlist.isSaving(overlayCard.id)"
+            :error="wishlist.errorFor(overlayCard.id)"
+            size="md"
+            @toggle="toggleOverlayWishlist"
+          />
+        </template>
       </CardDetailModal>
+
+      <InventoryAddToInventoryModal
+        v-model:open="isAddToInventoryOpen"
+        :card="addingCard"
+        :collections="collectionsData?.items ?? []"
+        :preset-quantity="addingQuantity"
+        @saved="onAddedToInventory"
+      />
+
+      <DecksDeckAddMissingToWishlistModal
+        v-model:open="isMissingToWishlistOpen"
+        :cards="deckMissing"
+        @added="onMissingAddedToWishlist"
+      />
     </template>
   </div>
 </template>

@@ -427,7 +427,10 @@ paginated, without notes. See
 ## Wunschliste
 
 `/wishlist` is a personal "cards I'm looking for" list, added from the catalog with a
-"Zur Wunschliste" toggle on each card. Each entry has a quantity and an optional note (e.g. "1st
+"Zur Wunschliste" toggle on each card, or from the deck editor (#178): the same toggle in each
+row's "…" menu and the card overlay, wishing for the deck's shortfall, and "Fehlende Karten auf
+die Wunschliste" in the deck's "…" menu for every missing card at once (cards already on the
+list are skipped, so their quantity and note stay). Each entry has a quantity and an optional note (e.g. "1st
 Edition bitte"). A profile setting ("Wunschliste öffentlich zeigen") publishes the list — with its
 notes, but never the owned-copy counts that are private inventory information — on the public
 profile page for other players to see. Trading against a wishlist is explicitly out of scope for

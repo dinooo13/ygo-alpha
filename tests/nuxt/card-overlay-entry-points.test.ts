@@ -160,6 +160,9 @@ mockNuxtImport('useFetch', () => {
     if (resolvedUrl === '/api/wishlist') {
       return result(state.wishlist)
     }
+    if (resolvedUrl === '/api/wishlist/ids') {
+      return result({ ids: [] })
+    }
     return result(state.deck)
   }
 })

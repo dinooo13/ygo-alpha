@@ -3,7 +3,7 @@ import { DOMWrapper as BodyWrapper, enableAutoUnmount, flushPromises } from '@vu
 import type { DOMWrapper } from '@vue/test-utils'
 import type { Ref } from 'vue'
 import { mountSuspended, mockNuxtImport } from '@nuxt/test-utils/runtime'
-import { DecksDeckFormModal, UApp, UDropdownMenu, USelect } from '#components'
+import { DecksDeckAddMissingToWishlistModal, DecksDeckFormModal, InventoryAddToInventoryModal, UApp, UDropdownMenu, USelect } from '#components'
 import DeckEditorPage from '~/pages/decks/[id].vue'
 import { optionLabels, selectWithOption } from './fixtures/select-wrapper'
 import type { DeckValidation } from '~~/shared/rule-formats'
@@ -55,6 +55,9 @@ const state = vi.hoisted(() => ({
   source: { items: [] as Array<Record<string, unknown>>, total: 0 },
   facets: { types: [] as string[], attributes: [] as string[] },
   ownedQuantities: {} as Record<string, number>,
+  /** `GET /api/wishlist/ids`; its `refresh` reads this again. */
+  wishlistIds: [] as number[],
+  wishlistRefresh: null as null | (() => Promise<void>),
   collections: { items: [] as Array<{ id: string, name: string }>, allCount: 0 },
   /** The add panel's `query` option (a computed), as passed to `useFetch`. */
   sourceQuery: null as unknown,
@@ -80,6 +83,14 @@ mockNuxtImport('useFetch', () => {
     if (resolvedUrl === '/api/inventory/owned-quantities') {
       return { data: ref(state.ownedQuantities), pending: ref(false), error: ref(null), refresh: vi.fn() }
     }
+    if (resolvedUrl === '/api/wishlist/ids') {
+      const data = ref({ ids: [...state.wishlistIds] })
+      const refresh = vi.fn(async () => {
+        data.value = { ids: [...state.wishlistIds] }
+      })
+      state.wishlistRefresh = refresh
+      return { data, pending: ref(false), error: ref(null), refresh }
+    }
     if (resolvedUrl === '/api/collections') {
       return { data: ref(state.collections), pending: ref(false), error: ref(null), refresh: vi.fn() }
     }
@@ -89,6 +100,9 @@ mockNuxtImport('useFetch', () => {
     return { data: ref(state.deck), pending: ref(false), error: ref(null), refresh: vi.fn() }
   }
 })
+
+const toastAdd = vi.hoisted(() => vi.fn())
+mockNuxtImport('useToast', () => () => ({ add: toastAdd }))
 
 mockNuxtImport('useRoute', () => {
   return () => ({ path: '/decks/deck-1', params: { id: 'deck-1' }, query: {} })
@@ -146,6 +160,7 @@ afterEach(async () => {
   }
   vi.unstubAllGlobals()
   state.ownedQuantities = {}
+  state.wishlistIds = []
 })
 
 describe('deck editor', () => {
@@ -1382,7 +1397,7 @@ describe('deck editor header and row layout', () => {
       (candidate.props('items') as Array<Array<{ label: string }>>).flat().some(item => item.label === 'Umbenennen'))
     expect(menu).toBeTruthy()
     const items = (menu!.props('items') as Array<Array<{ label: string, onSelect: () => void }>>).flat()
-    expect(items.map(item => item.label)).toEqual(['Umbenennen', 'Löschen'])
+    expect(items.map(item => item.label)).toEqual(['Umbenennen', 'Fehlende Karten auf die Wunschliste', 'Löschen'])
 
     expect(component.findComponent(DecksDeckFormModal).props('open')).toBe(false)
     items[0]!.onSelect()
@@ -1503,10 +1518,10 @@ describe('deck editor cover card', () => {
     const component = await mountSuspended(DeckEditorPage)
 
     const potMenu = rowMenu(component, 'Pot of Greed', 'main')
-    expect(potMenu.map(item => item.label)).toEqual(['Nach Extra Deck', 'Nach Side Deck', 'Als Titelkarte festlegen'])
+    expect(potMenu.map(item => item.label)).toEqual(['Nach Extra Deck', 'Nach Side Deck', 'Als Titelkarte festlegen', 'Zum Inventar', 'Zur Wunschliste'])
 
     const sideMenu = rowMenu(component, 'Dark Magician', 'side')
-    expect(sideMenu.map(item => item.label)).toEqual(['Nach Main Deck', 'Nach Extra Deck'])
+    expect(sideMenu.map(item => item.label)).toEqual(['Nach Main Deck', 'Nach Extra Deck', 'Zum Inventar', 'Zur Wunschliste'])
 
     // The menu button is the "Optionen für …" row menu.
     const button = component.find('[aria-label="Optionen für Pot of Greed"]')
@@ -1783,6 +1798,308 @@ describe('deck editor add panel paging', () => {
   })
 })
 
+describe('deck editor wishlist and inventory (#178)', () => {
+  const DARK_MAGICIAN = 46986414
+  const STARDUST = 44508094
+  const KURIBOH = 40640057
+
+  type MenuItem = { label: string, icon?: string, disabled?: boolean, onSelect: () => void }
+  type MenuWrapper = { props: (key: string) => unknown, find: (selector: string) => { exists: () => boolean } }
+  type Page = Awaited<ReturnType<typeof mountSuspended>>
+
+  function body() {
+    return new BodyWrapper(document.body)
+  }
+
+  const mounted: Array<{ unmount: () => void }> = []
+
+  async function mountPage() {
+    const component = await mountSuspended(DeckEditorPage)
+    mounted.push(component)
+    return component
+  }
+
+  afterEach(() => {
+    for (const component of mounted.splice(0)) {
+      component.unmount()
+    }
+    document.body.innerHTML = ''
+    toastAdd.mockClear()
+  })
+
+  /** Dark Magician 3 in Main (2 owned), Stardust 1 in Extra (none owned), Kuriboh 1 in Side (owned). */
+  function shortDeck(darkMagicianOwned = 2) {
+    return deckDetail({
+      main: [row({ name: 'Dark Magician', section: 'main', quantity: 3, owned: darkMagicianOwned, usedInDeck: 3, shortfall: Math.max(0, 3 - darkMagicianOwned) })],
+      extra: [row({ name: 'Stardust Dragon', section: 'extra', catalogCardId: STARDUST, type: 'Synchro Monster', frameType: 'synchro', level: 8, owned: 0, shortfall: 1 })],
+      side: [row({ name: 'Kuriboh', section: 'side', catalogCardId: KURIBOH, type: 'Effect Monster', frameType: 'effect', level: 1 })],
+    })
+  }
+
+  function catalogDetail(id: number, name: string) {
+    return {
+      card: {
+        id,
+        name,
+        nameDe: null,
+        type: 'Normal Monster',
+        frameType: 'normal',
+        desc: `The card text of ${name}.`,
+        descDe: null,
+        race: 'Spellcaster',
+        archetype: null,
+        attribute: 'DARK',
+        atk: 2500,
+        def: 2100,
+        level: 7,
+        linkval: null,
+        scale: null,
+        linkMarkers: null,
+        banlistInfo: null,
+        cardPrices: null,
+        tcgDate: null,
+        ocgDate: null,
+        ygoprodeckUrl: null,
+        retired: false,
+        replacedById: null,
+      },
+      printings: [],
+      images: [],
+    }
+  }
+
+  // Wishlist and deck requests go to `handler`; the overlay's card detail answers at once.
+  function stubFetch(handler: (url: string, options?: Record<string, unknown>) => Promise<unknown> = () => Promise.resolve(null)) {
+    const mock = vi.fn((url: string, options?: Record<string, unknown>) => {
+      if (url.startsWith('/api/catalog/cards/')) {
+        const id = Number(url.split('/').at(-1))
+        return Promise.resolve(catalogDetail(id, id === STARDUST ? 'Stardust Dragon' : 'Dark Magician'))
+      }
+      return url.startsWith('/api/wishlist') || url.startsWith('/api/decks/') || url.startsWith('/api/inventory/')
+        ? handler(url, options)
+        : Promise.resolve(null)
+    })
+    vi.stubGlobal('$fetch', mock)
+    return mock
+  }
+
+  function callsTo(mock: ReturnType<typeof stubFetch>, prefix: string) {
+    return mock.mock.calls.filter(([url]) => String(url).startsWith(prefix))
+  }
+
+  function rowMenu(component: Page, name: string, section: DeckSection): MenuItem[] {
+    const menus = component.findAllComponents(UDropdownMenu) as unknown as MenuWrapper[]
+    const others = (['main', 'extra', 'side'] as const)
+      .filter(other => other !== section)
+      .map(other => `Nach ${{ main: 'Main Deck', extra: 'Extra Deck', side: 'Side Deck' }[other]}`)
+    const menu = menus.find((candidate) => {
+      const labels = (candidate.props('items') as MenuItem[][]).flat().map(item => item.label)
+      return candidate.find(`[aria-label="Optionen für ${name}"]`).exists() && others.every(label => labels.includes(label))
+    })
+    expect(menu, `${name} (${section})`).toBeTruthy()
+    return (menu!.props('items') as MenuItem[][]).flat()
+  }
+
+  function menuItem(component: Page, name: string, section: DeckSection, label: string): MenuItem {
+    const item = rowMenu(component, name, section).find(candidate => candidate.label === label)
+    expect(item, `${label} for ${name}`).toBeTruthy()
+    return item!
+  }
+
+  function deckMenu(component: Page): MenuItem[] {
+    const menus = component.findAllComponents(UDropdownMenu) as unknown as MenuWrapper[]
+    const menu = menus.find(candidate => candidate.find('[aria-label="Weitere Aktionen"]').exists())
+    return (menu!.props('items') as MenuItem[][]).flat()
+  }
+
+  function rowOf(component: Page, name: string, section: DeckSection) {
+    const sectionLabel = { main: 'Main Deck', extra: 'Extra Deck', side: 'Side Deck' }[section]
+    const item = component.findAll('li').find((li: DOMWrapper<Element>) => li.find(`[aria-label="${name} aus dem ${sectionLabel} entfernen"]`).exists())
+    expect(item, `${name} (${section})`).toBeTruthy()
+    return item!
+  }
+
+  const isWished = (component: Page, name: string, section: DeckSection) =>
+    rowOf(component, name, section).find('[data-testid="row-wishlisted"]').exists()
+
+  it('offers both actions in the row menu of every section', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck()
+    stubFetch()
+
+    const component = await mountPage()
+
+    for (const [name, section] of [['Dark Magician', 'main'], ['Stardust Dragon', 'extra'], ['Kuriboh', 'side']] as const) {
+      const labels = rowMenu(component, name, section).map(item => item.label)
+      expect(labels.slice(-2), name).toEqual(['Zum Inventar', 'Zur Wunschliste'])
+    }
+  })
+
+  it('marks a wished card on every row and offers to remove it', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = {
+      ...shortDeck(),
+      sections: { ...shortDeck().sections, side: [row({ name: 'Dark Magician', section: 'side', owned: 2, usedInDeck: 4 })] },
+    }
+    state.wishlistIds = [DARK_MAGICIAN]
+    stubFetch()
+
+    const component = await mountPage()
+
+    expect(isWished(component, 'Dark Magician', 'main')).toBe(true)
+    expect(isWished(component, 'Dark Magician', 'side')).toBe(true)
+    expect(isWished(component, 'Stardust Dragon', 'extra')).toBe(false)
+    expect(rowOf(component, 'Dark Magician', 'main').find('[data-testid="row-wishlisted"]').text()).toBe('Auf der Wunschliste')
+    expect(rowMenu(component, 'Dark Magician', 'main').at(-1)!.label).toBe('Von der Wunschliste entfernen')
+    expect(rowMenu(component, 'Stardust Dragon', 'extra').at(-1)!.label).toBe('Zur Wunschliste')
+  })
+
+  it('wishes for the deck\'s shortfall, then removes the card on the second select', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck(0)
+    const fetchMock = stubFetch(() => Promise.resolve(null))
+
+    const component = await mountPage()
+
+    menuItem(component, 'Dark Magician', 'main', 'Zur Wunschliste').onSelect()
+    await flushPromises()
+
+    expect(callsTo(fetchMock, '/api/wishlist')).toEqual([['/api/wishlist', { method: 'POST', body: { catalogCardId: DARK_MAGICIAN, quantity: 3 } }]])
+    expect(isWished(component, 'Dark Magician', 'main')).toBe(true)
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ title: 'Dark Magician auf die Wunschliste gesetzt (3 Exemplare)', color: 'success' }))
+
+    menuItem(component, 'Dark Magician', 'main', 'Von der Wunschliste entfernen').onSelect()
+    await flushPromises()
+
+    expect(callsTo(fetchMock, '/api/wishlist').at(-1)).toEqual([`/api/wishlist/card/${DARK_MAGICIAN}`, { method: 'DELETE' }])
+    expect(isWished(component, 'Dark Magician', 'main')).toBe(false)
+    expect(toastAdd).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Von der Wunschliste entfernt' }))
+  })
+
+  it('wishes for one copy of a card the deck isn\'t short of', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck()
+    const fetchMock = stubFetch(() => Promise.resolve(null))
+
+    const component = await mountPage()
+    menuItem(component, 'Kuriboh', 'side', 'Zur Wunschliste').onSelect()
+    await flushPromises()
+
+    expect(callsTo(fetchMock, '/api/wishlist')).toEqual([['/api/wishlist', { method: 'POST', body: { catalogCardId: KURIBOH, quantity: 1 } }]])
+  })
+
+  it('shows no badge and an error toast when the wishlist rejects the card', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck()
+    stubFetch(url => (url === '/api/wishlist' ? Promise.reject(new Error('offline')) : Promise.resolve(null)))
+
+    const component = await mountPage()
+    menuItem(component, 'Stardust Dragon', 'extra', 'Zur Wunschliste').onSelect()
+    await flushPromises()
+
+    expect(isWished(component, 'Stardust Dragon', 'extra')).toBe(false)
+    expect(toastAdd).toHaveBeenCalledWith(expect.objectContaining({ title: 'Die Wunschliste konnte nicht aktualisiert werden.', color: 'error' }))
+    expect(rowMenu(component, 'Stardust Dragon', 'extra').at(-1)!.label).toBe('Zur Wunschliste')
+  })
+
+  it('opens "Karte hinzufügen" with the shortfall and reloads the deck after saving', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck(1)
+    const fetchMock = stubFetch(url => Promise.resolve(url === '/api/decks/deck-1' ? shortDeck(3) : {}))
+
+    const component = await mountPage()
+    const modal = component.findComponent(InventoryAddToInventoryModal)
+    expect(modal.props('open')).toBe(false)
+
+    menuItem(component, 'Dark Magician', 'main', 'Zum Inventar').onSelect()
+    await component.vm.$nextTick()
+
+    expect(modal.props('open')).toBe(true)
+    expect(modal.props('card')).toEqual({ id: DARK_MAGICIAN, name: 'Dark Magician', nameDe: null, type: 'Normal Monster' })
+    expect(modal.props('presetQuantity')).toBe(2)
+    expect(rowOf(component, 'Dark Magician', 'main').find('[data-shortfall]').text()).toBe('3/1')
+
+    modal.vm.$emit('saved')
+    await flushPromises()
+
+    expect(callsTo(fetchMock, '/api/decks/')).toEqual([['/api/decks/deck-1']])
+    const usage = rowOf(component, 'Dark Magician', 'main').find('span.tabular-nums')
+    expect(usage.text()).toBe('3/3')
+    expect(usage.attributes('data-shortfall')).toBeUndefined()
+  })
+
+  it('offers both actions in the card overlay, with the rows\' wishlist state', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck()
+    const fetchMock = stubFetch(() => Promise.resolve(null))
+
+    const component = await mountPage()
+    const button = component.findAll('button[aria-haspopup="dialog"]').find(btn => btn.text() === 'Stardust Dragon')
+    await button!.trigger('click')
+    await flushPromises()
+
+    const footerButton = (label: string) => body().findAll('[role="dialog"] button').find(btn => btn.text() === label)
+    await vi.waitFor(() => {
+      expect(footerButton('Zur Wunschliste')).toBeTruthy()
+    })
+    expect(footerButton('Zum Inventar')).toBeTruthy()
+
+    await footerButton('Zur Wunschliste')!.trigger('click')
+    await flushPromises()
+
+    expect(callsTo(fetchMock, '/api/wishlist')).toEqual([['/api/wishlist', { method: 'POST', body: { catalogCardId: STARDUST, quantity: 1 } }]])
+    expect(footerButton('Auf der Wunschliste')).toBeTruthy()
+    expect(isWished(component, 'Stardust Dragon', 'extra')).toBe(true)
+
+    await footerButton('Zum Inventar')!.trigger('click')
+    await component.vm.$nextTick()
+    const modal = component.findComponent(InventoryAddToInventoryModal)
+    expect(modal.props('open')).toBe(true)
+    expect(modal.props('card')).toMatchObject({ id: STARDUST, name: 'Stardust Dragon' })
+    expect(modal.props('presetQuantity')).toBe(1)
+  })
+
+  it('disables "Fehlende Karten auf die Wunschliste" when the deck is short of nothing', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = deckDetail({ main: [row({ name: 'Dark Magician', section: 'main', quantity: 2, owned: 3, usedInDeck: 2 })] })
+    stubFetch()
+
+    const component = await mountPage()
+
+    expect(deckMenu(component).find(item => item.label === 'Fehlende Karten auf die Wunschliste')!.disabled).toBe(true)
+  })
+
+  it('opens the missing cards dialog with the whole deck\'s shortfall and reloads the wishlist after it', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck(1)
+    state.wishlistIds = [STARDUST]
+    stubFetch(() => Promise.resolve(null))
+
+    const component = await mountPage()
+    const item = deckMenu(component).find(candidate => candidate.label === 'Fehlende Karten auf die Wunschliste')!
+    expect(item.disabled).toBe(false)
+
+    const modal = component.findComponent(DecksDeckAddMissingToWishlistModal)
+    expect(modal.props('open')).toBe(false)
+    item.onSelect()
+    await component.vm.$nextTick()
+
+    expect(modal.props('open')).toBe(true)
+    expect(modal.props('cards')).toEqual([
+      { catalogCardId: DARK_MAGICIAN, name: 'Dark Magician', nameDe: null, missing: 2, wishlisted: false },
+      { catalogCardId: STARDUST, name: 'Stardust Dragon', nameDe: null, missing: 1, wishlisted: true },
+    ])
+
+    // The dialog put Dark Magician on the wishlist: the rows follow without a reload.
+    state.wishlistIds = [STARDUST, DARK_MAGICIAN]
+    modal.vm.$emit('added', [DARK_MAGICIAN])
+    await flushPromises()
+
+    expect(state.wishlistRefresh).toHaveBeenCalled()
+    expect(isWished(component, 'Dark Magician', 'main')).toBe(true)
+  })
+})
+
 describe('deck editor in English', () => {
   const POT_OF_GREED = 55144522
   const RAIGEKI = 12580477
@@ -1861,7 +2178,7 @@ describe('deck editor in English', () => {
     const menus = component.findAllComponents(UDropdownMenu) as unknown as Array<{ props: (key: string) => unknown, find: (selector: string) => { exists: () => boolean } }>
     const potMenu = menus.find(menu => menu.find('[aria-label="Options for Pot of Greed"]').exists())
     expect((potMenu!.props('items') as Array<Array<{ label: string }>>).flat().map(item => item.label))
-      .toEqual(['Move to Extra Deck', 'Move to Side Deck', 'Set as cover card'])
+      .toEqual(['Move to Extra Deck', 'Move to Side Deck', 'Set as cover card', 'Add to inventory', 'Add to wishlist'])
     expect(component.find('[aria-label="Remove one copy of Dark Magician from the Main Deck"]').exists()).toBe(true)
   })
 
