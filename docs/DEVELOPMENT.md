@@ -51,6 +51,12 @@ Start the dev server at `http://localhost:3000`:
 pnpm dev
 ```
 
+For a throwaway server next to it (agents use this to check their work), run
+`PORT=3417 pnpm dev:agent`. It has a scratch database in `.agent/`, the E2E catalog fixture and
+the fake assistant. `PORT=3417 pnpm seed:demo` then adds a demo account
+(`demo@example.com` / `demo-duelist-2026`) with decks, an inventory and a tournament; see
+`## Verify` in [`AGENTS.md`](../AGENTS.md).
+
 The service worker is off in dev (#94). Start with `PWA_DEV_SW=1 pnpm dev` to test PWA behaviour; then
 restart the dev server by hand whenever `.nuxt` was wiped (`pnpm install`, `nuxt prepare`, `pnpm build`).
 A dev service worker left over from earlier runs is harmless (it only precaches `suppress-warnings.js`);
