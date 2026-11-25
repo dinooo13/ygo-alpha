@@ -1,21 +1,41 @@
+# Self-hosting with Docker Compose (docs/DEVELOPMENT.md, "Docker"). Needs
+# Docker Compose 2.24 or newer. Set these in a `.env` file next to this file
+# (Compose reads it for the ${...} below and also hands it to the container):
+#
+#   NUXT_BETTER_AUTH_SECRET      required: a long random string, e.g.
+#                                `openssl rand -base64 32`
+#   NUXT_PUBLIC_BETTER_AUTH_URL  the exact URL people open in the browser
+#                                (default http://localhost:<YGO_ALPHA_PORT>);
+#                                any other URL makes login fail with 403
+#   YGO_ALPHA_PORT               host port (default 3000)
+#   YGO_ALPHA_DATA_DIR           host folder for the SQLite database
+#                                (default ./data); create it before the
+#                                first start, owned by YGO_ALPHA_USER
+#   YGO_ALPHA_USER               uid:gid the app runs as (default 1001:1001,
+#                                the image's `nuxt` user)
+#
+# Inside the container the app always listens on port 3000 and keeps its
+# database in /app/data; the `environment:` values below win over the same
+# names in `.env`.
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+    user: '${YGO_ALPHA_USER:-1001:1001}'
     ports:
-      - '3000:3000'
+      - '${YGO_ALPHA_PORT:-3000}:3000'
     environment:
       NODE_ENV: production
+      # Nitro listens on NITRO_PORT, else PORT: pinned so a PORT in `.env`
+      # can't move the app away from the published container port.
+      NITRO_PORT: '3000'
       NUXT_DB_FILE_PATH: /app/data/app.db
-      # REQUIRED in production: set a long random secret, e.g. via .env
-      # (NUXT_BETTER_AUTH_SECRET=...) or export it in your shell before
-      # running `docker compose up`. The fallback below is NOT secure.
-      NUXT_BETTER_AUTH_SECRET: ${NUXT_BETTER_AUTH_SECRET:-change-me-to-a-long-random-string}
-      NUXT_PUBLIC_BETTER_AUTH_URL: ${NUXT_PUBLIC_BETTER_AUTH_URL:-http://localhost:3000}
+      NUXT_BETTER_AUTH_SECRET: ${NUXT_BETTER_AUTH_SECRET:?Set NUXT_BETTER_AUTH_SECRET in .env, e.g. openssl rand -base64 32}
+      NUXT_PUBLIC_BETTER_AUTH_URL: ${NUXT_PUBLIC_BETTER_AUTH_URL:-http://localhost:${YGO_ALPHA_PORT:-3000}}
     env_file:
       - path: .env
         required: false
     volumes:
-      - ./data:/app/data
+      - ${YGO_ALPHA_DATA_DIR:-./data}:/app/data
     restart: unless-stopped
