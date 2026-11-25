@@ -6,6 +6,7 @@
     "build": "nuxt build",
     "dev": "nuxt dev",
     "dev:agent": "NUXT_PUBLIC_BETTER_AUTH_URL=http://localhost:${PORT:-3400} NUXT_DB_FILE_PATH=.agent/app.db NUXT_E2E_SEED_CATALOG=1 NUXT_ASSISTANT_PROVIDER=fake NUXT_INVITE_CODE= nuxt dev --port ${PORT:-3400} --strictPort --no-takeover --no-tui",
+    "seed:demo": "node scripts/seed-demo.mjs",
     "generate": "nuxt generate",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
