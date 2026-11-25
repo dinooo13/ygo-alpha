@@ -63,7 +63,8 @@ write_env() {
   } > "$env_file"
 }
 
-# assert_config <port> <data dir> <uid:gid>: what Compose makes of the env file.
+# assert_config <port> <data dir> <uid:gid or empty>: what Compose makes of the
+# env file. Empty user = none set, so the image's own user applies.
 assert_config() {
   compose config --format json | jq -e \
     --arg port "$1" --arg data "$2" --arg user "$3" '
@@ -74,7 +75,7 @@ assert_config() {
       and $app.environment.NUXT_PUBLIC_BETTER_AUTH_URL == "http://localhost:\($port)"
       and $app.environment.NITRO_PORT == "3000"
       and $app.environment.NUXT_DB_FILE_PATH == "/app/data/app.db"
-      and $app.user == $user
+      and ($app.user // "") == $user
       and $app.volumes[0].source == $data
       and $app.volumes[0].target == "/app/data"
     ' > /dev/null || {
@@ -123,7 +124,7 @@ fi
 grep -q 'Set NUXT_BETTER_AUTH_SECRET' "$tmp/config.err" ||
   fail "unexpected error without a secret: $(cat "$tmp/config.err")"
 write_env '' ''
-assert_config 3000 "$repo/data" 1001:1001
+assert_config 3000 "$repo/data" ''
 
 echo "== Build"
 compose build
@@ -147,10 +148,11 @@ scenario() {
   sudo chown "$uid_gid" "$data"
   if [ "$user_flag" = default ]; then
     write_env "$port" "$data"
+    assert_config "$port" "$data" ''
   else
     write_env "$port" "$data" "$uid_gid"
+    assert_config "$port" "$data" "$uid_gid"
   fi
-  assert_config "$port" "$data" "$uid_gid"
 
   compose up -d --no-build
   wait_for_login "$port"

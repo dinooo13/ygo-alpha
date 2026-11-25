@@ -11,8 +11,8 @@
 #   YGO_ALPHA_DATA_DIR           host folder for the SQLite database
 #                                (default ./data); create it before the
 #                                first start, owned by YGO_ALPHA_USER
-#   YGO_ALPHA_USER               uid:gid the app runs as (default 1001:1001,
-#                                the image's `nuxt` user)
+#   YGO_ALPHA_USER               uid:gid the app runs as (default: the
+#                                image's `nuxt` user, 1001:1001)
 #
 # Inside the container the app always listens on port 3000 and keeps its
 # database in /app/data; the `environment:` values below win over the same
@@ -22,7 +22,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    user: '${YGO_ALPHA_USER:-1001:1001}'
+    # Empty = the image's own user (`USER nuxt` in the Dockerfile).
+    user: '${YGO_ALPHA_USER:-}'
     ports:
       - '${YGO_ALPHA_PORT:-3000}:3000'
     environment:

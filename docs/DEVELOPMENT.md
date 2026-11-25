@@ -575,7 +575,7 @@ Then load the catalog once, as in the [README](../README.md#get-started) (on you
 | `NUXT_PUBLIC_BETTER_AUTH_URL` | `http://localhost:<YGO_ALPHA_PORT>` | The URL people open (see the URL rule above). |
 | `YGO_ALPHA_PORT` | `3000` | The port on the host. |
 | `YGO_ALPHA_DATA_DIR` | `./data` | The host folder for the database (`app.db`). Start it with `./` or `/`: anything else is read as the name of a Docker volume, and `compose.yaml` declares none. |
-| `YGO_ALPHA_USER` | `1001:1001` | The `uid:gid` the app runs as; `1001:1001` is the image's `nuxt` user. |
+| `YGO_ALPHA_USER` | the image's `nuxt` user (`1001:1001`) | The `uid:gid` the app runs as. |
 
 `.env` is used twice: Compose reads the settings above from it, and the whole file is also handed to the container, so the app's own settings (`NUXT_INVITE_CODE`, `NUXT_ADMIN_TOKEN`, `NUXT_ASSISTANT_*`, see [`.env.example`](../.env.example)) go there too. Inside the container the app always listens on port 3000 and keeps its database in `/app/data`: `compose.yaml` sets `NODE_ENV`, `NITRO_PORT` and `NUXT_DB_FILE_PATH` itself, and the same names in `.env` don't change them (a `PORT` or `NUXT_DB_FILE_PATH` meant for `pnpm dev` has no effect).
 
