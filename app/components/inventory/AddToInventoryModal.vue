@@ -26,6 +26,8 @@ const props = defineProps<{
   card: CatalogCardOption | null
   collections?: CollectionOption[]
   presetCollectionId?: string | null
+  /** The copies to start with (the deck editor's shortfall, #178); 1 without it. */
+  presetQuantity?: number
 }>()
 
 const emit = defineEmits<{
@@ -71,7 +73,7 @@ watch(
       return
     }
 
-    form.quantity = 1
+    form.quantity = Math.max(1, props.presetQuantity ?? 1)
     form.collectionId = props.presetCollectionId ?? noCollectionValue
     form.printing = { setCode: null, rarity: null }
     form.note = ''

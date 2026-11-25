@@ -8,6 +8,8 @@ import type { Ref } from 'vue'
  *
  * `initialIds` seeds the wishlisted cards (`GET /api/wishlist/ids`); a toggle
  * adds or removes a card and is ignored while that card is still saving.
+ * An add sends `quantity` only when given (the deck editor wishes for the
+ * deck's shortfall, #178); without it the server's default of 1 applies.
  */
 export function useWishlistToggle(initialIds: Ref<readonly number[]>) {
   const apiError = useApiError()
@@ -44,7 +46,7 @@ export function useWishlistToggle(initialIds: Ref<readonly number[]>) {
     return next
   }
 
-  async function toggle(cardId: number): Promise<void> {
+  async function toggle(cardId: number, quantity?: number): Promise<void> {
     if (isSaving(cardId)) {
       return
     }
@@ -59,7 +61,10 @@ export function useWishlistToggle(initialIds: Ref<readonly number[]>) {
 
     try {
       if (add) {
-        await $fetch('/api/wishlist', { method: 'POST', body: { catalogCardId: cardId } })
+        await $fetch('/api/wishlist', {
+          method: 'POST',
+          body: quantity === undefined ? { catalogCardId: cardId } : { catalogCardId: cardId, quantity },
+        })
       }
       else {
         await $fetch(`/api/wishlist/card/${cardId}`, { method: 'DELETE' })

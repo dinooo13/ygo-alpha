@@ -82,6 +82,23 @@ describe('useWishlistToggle', () => {
     expect(wishlist().isWishlisted(42)).toBe(false)
   })
 
+  it('sends a quantity only when one is given (the deck editor\'s shortfall, #178)', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(undefined))
+    vi.stubGlobal('$fetch', fetchMock)
+    const { wishlist } = await mountHost()
+
+    await wishlist().toggle(42, 2)
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/wishlist', { method: 'POST', body: { catalogCardId: 42, quantity: 2 } })
+    expect(wishlist().isWishlisted(42)).toBe(true)
+
+    // A removal ignores it.
+    await wishlist().toggle(42, 2)
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/wishlist/card/42', { method: 'DELETE' })
+
+    await wishlist().toggle(42)
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/wishlist', { method: 'POST', body: { catalogCardId: 42 } })
+  })
+
   it('ignores a second toggle while the first one is saving', async () => {
     const { wishlist } = await mountHost()
     // Stubbed after mounting: a pending `$fetch` would also hold up the mount.

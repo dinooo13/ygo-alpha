@@ -51,11 +51,11 @@ function labels(menu: PropsWrapper): string[][] {
 }
 
 describe('AddToInventoryModal printing (ADR 0034)', () => {
-  async function mountModal() {
+  async function mountModal(extraProps: { presetQuantity?: number } = {}) {
     const fetchMock = vi.fn(async (url: string) => url.endsWith('/printings') ? { items: setCodes } : { id: 'stack-1' })
     vi.stubGlobal('$fetch', fetchMock)
     const component = await mountSuspended(AddToInventoryModal, {
-      props: { open: true, card: { id: 89631139, name: 'Blue-Eyes White Dragon', type: 'Normal Monster' }, collections: [] },
+      props: { open: true, card: { id: 89631139, name: 'Blue-Eyes White Dragon', type: 'Normal Monster' }, collections: [], ...extraProps },
     })
     await flushPromises()
     return { component, fetchMock }
@@ -91,6 +91,15 @@ describe('AddToInventoryModal printing (ADR 0034)', () => {
     submit()
     await flushPromises()
     expect(posts(fetchMock)[0]![1]!.body).toMatchObject({ catalog_card_id: 89631139, set_code: null, rarity: null, quantity: 1 })
+  })
+
+  it('starts at the preset quantity (the deck editor\'s shortfall, #178)', async () => {
+    const { component, fetchMock } = await mountModal({ presetQuantity: 3 })
+
+    expect(named(component, 'CardQuantityStepper').props('modelValue')).toBe(3)
+    submit()
+    await flushPromises()
+    expect(posts(fetchMock)[0]![1]!.body).toMatchObject({ quantity: 3 })
   })
 
   it('picks the only listed rarity with the set code and posts both', async () => {
