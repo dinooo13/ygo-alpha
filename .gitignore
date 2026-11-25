@@ -37,3 +37,6 @@ logs
 .env
 .env.*
 !.env.example
+
+# Agent dev server database (pnpm dev:agent)
+.agent/
