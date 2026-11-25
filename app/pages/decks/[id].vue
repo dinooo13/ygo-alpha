@@ -229,8 +229,9 @@ const wishlist = useWishlistToggle(computed(() => wishlistIds.value?.ids ?? []))
 
 // Not `refresh()`: a failed refresh resets `data` to the empty default, and
 // every card would look un-wished. A failure keeps the last known state.
-// Only the newest answer counts, and none that overlapped a toggle: an
-// older list would undo that toggle's state.
+// Only the newest answer counts, and none still on its way when a toggle
+// started or finished: an older list would undo that toggle's state. (A
+// toggle still running when an answer lands sets its own card again.)
 let wishlistGeneration = 0
 async function reloadWishlistIds() {
   const generation = ++wishlistGeneration
