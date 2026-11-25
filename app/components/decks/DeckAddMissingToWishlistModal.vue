@@ -18,7 +18,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  /** Cards were put on the wishlist (also after a partial failure): reload its state. */
+  /** After every confirm, also after a failure or with no card added: reload the wishlist state. */
   added: [catalogCardIds: number[]]
 }>()
 
@@ -46,8 +46,7 @@ const toAdd = computed(() => props.cards.filter(card => !card.wishlisted))
 const hasWishlisted = computed(() => props.cards.some(card => card.wishlisted))
 
 async function confirm() {
-  const cards = toAdd.value
-  if (cards.length === 0 || isSaving.value) {
+  if (toAdd.value.length === 0 || isSaving.value) {
     return
   }
 
@@ -55,6 +54,13 @@ async function confirm() {
   errorMessage.value = ''
   const added: number[] = []
   try {
+    // The page's wishlist state can be stale (a card wished in another tab,
+    // or a failed reload that left it empty). The POST is an upsert that
+    // would overwrite such a card's quantity and note, so ask the server
+    // right before posting; if that fails, nothing is posted.
+    const { ids } = await $fetch<{ ids: number[] }>('/api/wishlist/ids')
+    const wished = new Set(ids)
+    const cards = toAdd.value.filter(card => !wished.has(card.catalogCardId))
     for (const card of cards) {
       await $fetch('/api/wishlist', {
         method: 'POST',
@@ -70,9 +76,8 @@ async function confirm() {
   }
   finally {
     isSaving.value = false
-    if (added.length > 0) {
-      emit('added', added)
-    }
+    // Also when nothing was added: the page's state may have been stale.
+    emit('added', added)
   }
 }
 </script>

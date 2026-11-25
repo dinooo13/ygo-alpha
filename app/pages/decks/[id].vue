@@ -221,11 +221,22 @@ const { data: facets } = await useFetch<SearchFacets>('/api/inventory/search/fac
 
 // The catalog's toggle state (#98): the row menus, the rows' badges and the
 // card overlay show the same state.
-const { data: wishlistIds, refresh: refreshWishlistIds } = await useFetch<{ ids: number[] }>('/api/wishlist/ids', {
+const { data: wishlistIds } = await useFetch<{ ids: number[] }>('/api/wishlist/ids', {
   headers: import.meta.server ? useRequestHeaders(['cookie']) : undefined,
   default: () => ({ ids: [] }),
 })
 const wishlist = useWishlistToggle(computed(() => wishlistIds.value?.ids ?? []))
+
+// Not `refresh()`: a failed refresh resets `data` to the empty default, and
+// every card would look un-wished. A failure keeps the last known state.
+async function reloadWishlistIds() {
+  try {
+    wishlistIds.value = await $fetch<{ ids: number[] }>('/api/wishlist/ids')
+  }
+  catch {
+    // Keeps the last known state.
+  }
+}
 
 // --- Rule format + live validation ----------------------------------------
 
@@ -901,7 +912,7 @@ function openAddToInventory(card: WantedCard, shortfall: number) {
 // A card not in the deck has no row with a fresh owned total: ask for it.
 async function refreshOverlayOwned(catalogCardId: number | undefined) {
   const card = overlayCard.value
-  if (!card || card.id !== catalogCardId) {
+  if (!card || card.id !== catalogCardId || usedByCard.value.has(card.id)) {
     return
   }
   try {
@@ -948,8 +959,15 @@ function toggleOverlayWishlist() {
 const deckMissing = computed(() => missingCards(sections.value, id => wishlist.isWishlisted(id)))
 const isMissingToWishlistOpen = ref(false)
 
+// The list shows the wishlist as it is now, not as it was when the page
+// loaded; confirming checks again on the server.
+function openMissingToWishlist() {
+  isMissingToWishlistOpen.value = true
+  void reloadWishlistIds()
+}
+
 async function onMissingAddedToWishlist() {
-  await refreshWishlistIds()
+  await reloadWishlistIds()
 }
 
 function rowMenuItems(row: DeckCardRow) {
@@ -1027,7 +1045,7 @@ const deckMenuItems = computed(() => [
     label: t('decks.editor.missingToWishlist.menu'),
     icon: 'i-lucide-heart',
     disabled: deckMissing.value.length === 0,
-    onSelect: () => { isMissingToWishlistOpen.value = true },
+    onSelect: openMissingToWishlist,
   }],
   [{ label: t('common.delete'), icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: deleteDeck }],
 ])

@@ -55,9 +55,8 @@ const state = vi.hoisted(() => ({
   source: { items: [] as Array<Record<string, unknown>>, total: 0 },
   facets: { types: [] as string[], attributes: [] as string[] },
   ownedQuantities: {} as Record<string, number>,
-  /** `GET /api/wishlist/ids`; its `refresh` reads this again. */
+  /** `GET /api/wishlist/ids` on load; later reloads go through `$fetch`. */
   wishlistIds: [] as number[],
-  wishlistRefresh: null as null | (() => Promise<void>),
   collections: { items: [] as Array<{ id: string, name: string }>, allCount: 0 },
   /** The add panel's `query` option (a computed), as passed to `useFetch`. */
   sourceQuery: null as unknown,
@@ -84,12 +83,7 @@ mockNuxtImport('useFetch', () => {
       return { data: ref(state.ownedQuantities), pending: ref(false), error: ref(null), refresh: vi.fn() }
     }
     if (resolvedUrl === '/api/wishlist/ids') {
-      const data = ref({ ids: [...state.wishlistIds] })
-      const refresh = vi.fn(async () => {
-        data.value = { ids: [...state.wishlistIds] }
-      })
-      state.wishlistRefresh = refresh
-      return { data, pending: ref(false), error: ref(null), refresh }
+      return { data: ref({ ids: [...state.wishlistIds] }), pending: ref(false), error: ref(null), refresh: vi.fn() }
     }
     if (resolvedUrl === '/api/collections') {
       return { data: ref(state.collections), pending: ref(false), error: ref(null), refresh: vi.fn() }
@@ -2073,7 +2067,7 @@ describe('deck editor wishlist and inventory (#178)', () => {
     state.source = { items: [], total: 0 }
     state.deck = shortDeck(1)
     state.wishlistIds = [STARDUST]
-    stubFetch(() => Promise.resolve(null))
+    const fetchMock = stubFetch(url => Promise.resolve(url === '/api/wishlist/ids' ? { ids: [...state.wishlistIds] } : null))
 
     const component = await mountPage()
     const item = deckMenu(component).find(candidate => candidate.label === 'Fehlende Karten auf die Wunschliste')!
@@ -2082,7 +2076,10 @@ describe('deck editor wishlist and inventory (#178)', () => {
     const modal = component.findComponent(DecksDeckAddMissingToWishlistModal)
     expect(modal.props('open')).toBe(false)
     item.onSelect()
-    await component.vm.$nextTick()
+    await flushPromises()
+
+    // Opening reads the wishlist again: the page's state may be stale.
+    expect(callsTo(fetchMock, '/api/wishlist/ids')).toHaveLength(1)
 
     expect(modal.props('open')).toBe(true)
     expect(modal.props('cards')).toEqual([
@@ -2095,8 +2092,23 @@ describe('deck editor wishlist and inventory (#178)', () => {
     modal.vm.$emit('added', [DARK_MAGICIAN])
     await flushPromises()
 
-    expect(state.wishlistRefresh).toHaveBeenCalled()
+    expect(callsTo(fetchMock, '/api/wishlist/ids')).toHaveLength(2)
     expect(isWished(component, 'Dark Magician', 'main')).toBe(true)
+  })
+
+  it('keeps the wishlist state when reading it again fails', async () => {
+    state.source = { items: [], total: 0 }
+    state.deck = shortDeck(1)
+    state.wishlistIds = [STARDUST]
+    stubFetch(url => (url === '/api/wishlist/ids' ? Promise.reject(new Error('offline')) : Promise.resolve(null)))
+
+    const component = await mountPage()
+    deckMenu(component).find(candidate => candidate.label === 'Fehlende Karten auf die Wunschliste')!.onSelect()
+    await flushPromises()
+
+    expect(component.findComponent(DecksDeckAddMissingToWishlistModal).props('cards')).toContainEqual(
+      expect.objectContaining({ catalogCardId: STARDUST, wishlisted: true }),
+    )
   })
 })
 
