@@ -104,7 +104,8 @@ async function confirm() {
             class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-3 py-1.5"
             :data-wishlisted="card.wishlisted ? '' : undefined"
           >
-            <span class="min-w-0 flex-1 truncate text-highlighted">{{ cardName(card) }}</span>
+            <!-- min-w-40: on a phone the badge wraps below the name instead of cutting it off. -->
+            <span class="min-w-40 flex-1 truncate text-highlighted">{{ cardName(card) }}</span>
             <span class="flex shrink-0 items-center gap-2 text-xs">
               <UBadge
                 v-if="card.wishlisted"
