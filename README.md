@@ -138,8 +138,10 @@ curl -X POST http://localhost:3000/_nitro/tasks/catalog:sync
 **Self-hosting with Docker:**
 
 ```bash
+mkdir -p data && sudo chown 1001:1001 data
 cat > .env <<EOF
 NUXT_BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+NUXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
 NUXT_INVITE_CODE=pick-a-code-for-your-playgroup
 NUXT_ADMIN_TOKEN=$(openssl rand -hex 32)
 EOF
@@ -150,10 +152,12 @@ curl -X POST http://localhost:3000/api/admin/catalog/sync \
   -H "Authorization: Bearer $(sed -n 's/^NUXT_ADMIN_TOKEN=//p' .env)"
 ```
 
-With `NUXT_INVITE_CODE` set, only people who know the code can register; without it, anyone can. On a public
-host, also set `NUXT_PUBLIC_BETTER_AUTH_URL` to the app's URL. The SQLite database is stored in `./data`, and
-migrations run on startup. For the assistant, set an OpenAI-compatible endpoint and key in `.env` (see
-[`.env.example`](.env.example)). The app works without one, only the assistant is turned off.
+Set `NUXT_PUBLIC_BETTER_AUTH_URL` to exactly the address people open, such as `http://192.168.1.10:8080`: from any
+other address, login fails. `YGO_ALPHA_PORT`, `YGO_ALPHA_DATA_DIR` and `YGO_ALPHA_USER` in `.env` choose the host
+port, the folder for the SQLite database and the user the app runs as. The [Docker guide](docs/DEVELOPMENT.md#docker)
+explains them, with a Synology example and how to update. With `NUXT_INVITE_CODE` set, only people who know the code
+can register; without it, anyone can. Migrations run on startup. For the assistant, set an OpenAI-compatible endpoint
+and key in `.env` (see [`.env.example`](.env.example)). The app works without one, only the assistant is turned off.
 
 The [**Developer guide**](docs/DEVELOPMENT.md) covers configuration, German card data, the rule engine in
 detail, tests and the project structure.

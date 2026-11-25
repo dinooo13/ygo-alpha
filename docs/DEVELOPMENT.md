@@ -550,19 +550,77 @@ pnpm preview
 
 ### Docker
 
-Build and start the app with Docker Compose:
+`compose.yaml` builds the image from your checkout and runs it; there is no published image to pull. You need Docker Compose 2.24 or newer (`docker compose version`). The build compiles the app and the SQLite driver, so it needs a few GB of RAM and takes a while, noticeably longer on small or ARM NAS models. CI builds the image and runs it on amd64 and arm64 for every change (`.github/workflows/docker.yml`, `scripts/docker-smoke.sh`).
+
+**The URL rule:** set `NUXT_PUBLIC_BETTER_AUTH_URL` to exactly the URL people open in the browser, with scheme, host and port, for example `http://192.168.1.10:8080` or `https://ygo.example.com`. Better Auth refuses sign-in and sign-up from any other origin with HTTP 403. The default, `http://localhost:<YGO_ALPHA_PORT>`, only works in a browser on the Docker host itself. If people reach the app under more than one address, put the others in `BETTER_AUTH_TRUSTED_ORIGINS` in `.env` (comma-separated, e.g. `http://192.168.1.10:8080,https://ygo.example.com`). With an `https://` URL the login cookie is marked Secure, so the browser only sends it over HTTPS (behind a reverse proxy).
+
+Start it from the checkout:
 
 ```bash
-docker compose up --build
+mkdir -p data && sudo chown 1001:1001 data
+cat > .env <<EOF
+NUXT_BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+NUXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
+NUXT_INVITE_CODE=pick-a-code-for-your-playgroup
+NUXT_ADMIN_TOKEN=$(openssl rand -hex 32)
+EOF
+docker compose up --build -d
 ```
 
-The app is then available at `http://localhost:3000`. The SQLite database is persisted through the `./data:/app/data` volume, so it survives container restarts.
+Then load the catalog once, as in the [README](../README.md#get-started) (on your `YGO_ALPHA_PORT`). These settings in `.env` change how the container is run:
 
-For production, `NUXT_BETTER_AUTH_SECRET` must be set, for example through a `.env` file in the project root (automatically loaded by `compose.yaml` when present) or as an environment variable before startup:
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `NUXT_BETTER_AUTH_SECRET` | none, required | Signs the login sessions. Without it, `docker compose` stops with "Set NUXT_BETTER_AUTH_SECRET in .env". |
+| `NUXT_PUBLIC_BETTER_AUTH_URL` | `http://localhost:<YGO_ALPHA_PORT>` | The URL people open (see the URL rule above). |
+| `YGO_ALPHA_PORT` | `3000` | The port on the host. |
+| `YGO_ALPHA_DATA_DIR` | `./data` | The host folder for the database (`app.db`). Start it with `./` or `/`: anything else is read as the name of a Docker volume, and `compose.yaml` declares none. |
+| `YGO_ALPHA_USER` | `1001:1001` | The `uid:gid` the app runs as; `1001:1001` is the image's `nuxt` user. |
+
+`.env` is used twice: Compose reads the settings above from it, and the whole file is also handed to the container, so the app's own settings (`NUXT_INVITE_CODE`, `NUXT_ADMIN_TOKEN`, `NUXT_ASSISTANT_*`, see [`.env.example`](../.env.example)) go there too. Inside the container the app always listens on port 3000 and keeps its database in `/app/data`: `compose.yaml` sets `NODE_ENV`, `NITRO_PORT` and `NUXT_DB_FILE_PATH` itself, and the same names in `.env` don't change them (a `PORT` or `NUXT_DB_FILE_PATH` meant for `pnpm dev` has no effect).
+
+**The data folder:** the app has to be able to write it. Docker creates a missing folder as root, which the app's user can't write, so create the folder before the first start and either give it to the image's user (`sudo chown 1001:1001 <folder>`) or set `YGO_ALPHA_USER` to the folder owner's `uid:gid`. The app creates `app.db` and applies the migrations when it starts. Keep the folder on a local disk: SQLite on a network share (NFS, SMB) can corrupt the database. For a backup, copy `app.db` while the container is stopped.
+
+**Synology (DSM, Container Manager):** over SSH on the NAS (Control Panel → Terminal & SNMP → Enable SSH service), as your own user, put the checkout in `/volume1/docker/ygo-alpha` (with `git`, for example from the Git Server package, or unpack the source ZIP from GitHub there). Replace `192.168.1.10` with the address of your NAS:
 
 ```bash
-NUXT_BETTER_AUTH_SECRET="$(openssl rand -base64 32)" docker compose up --build -d
+cd /volume1/docker/ygo-alpha
+mkdir -p data
+cat > .env <<EOF
+NUXT_BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+NUXT_PUBLIC_BETTER_AUTH_URL=http://192.168.1.10:8080
+YGO_ALPHA_PORT=8080
+YGO_ALPHA_DATA_DIR=/volume1/docker/ygo-alpha/data
+YGO_ALPHA_USER=$(id -u):$(id -g)
+NUXT_INVITE_CODE=pick-a-code-for-your-playgroup
+NUXT_ADMIN_TOKEN=$(openssl rand -hex 32)
+EOF
+sudo docker compose up --build -d
 ```
+
+`id -u` and `id -g` print your user's ids (often something like `1026` and `100`); `mkdir` made you the owner of `data`, so the app can write it without a `chown`. The app is then at `http://192.168.1.10:8080`.
+
+**Updating:**
+
+```bash
+git pull
+docker compose up --build -d
+```
+
+The database stays in the data folder, and new migrations run on startup. Old image layers pile up; `docker image prune` removes them.
+
+**Upgrading from an older `compose.yaml`:** it used to fall back to a built-in secret when `NUXT_BETTER_AUTH_SECRET` wasn't set. That fallback is gone, so `docker compose` now stops until `.env` has a secret. Add one (`openssl rand -base64 32`); everyone is logged out once, accounts and data stay.
+
+**Without Compose:** a sketch with `docker run`, with the secret and `NUXT_PUBLIC_BETTER_AUTH_URL=http://192.168.1.10:8080` in `.env`:
+
+```bash
+docker build -t ygo-alpha .
+docker run -d --name ygo-alpha --restart unless-stopped \
+  -p 8080:3000 -v /srv/ygo-alpha/data:/app/data --user 1001:1001 \
+  --env-file .env ygo-alpha
+```
+
+Here nothing pins the container side: the app listens on `PORT` (default 3000) and keeps its database at `NUXT_DB_FILE_PATH` (default `/app/data/app.db`), so leave both out of that `.env` or keep them at those values.
 
 ### Plesk (ygo-alpha.de)
 

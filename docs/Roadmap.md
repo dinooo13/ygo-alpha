@@ -155,6 +155,18 @@ code, `NUXT_INVITE_CODE`) and the catalog sync endpoints need an admin token
 `scripts/deploy-plesk.sh`, locally or from the manual GitHub Actions workflow
 (ADR 0028).
 
+Tester-Feedback Nov 2026 (#179): self-hosting with Docker on a NAS without a
+fork.
+
+- [x] `compose.yaml` takes the host port, the data folder and the uid:gid
+      from `.env` (`YGO_ALPHA_PORT`, `YGO_ALPHA_DATA_DIR`, `YGO_ALPHA_USER`)
+      and requires `NUXT_BETTER_AUTH_SECRET` instead of a built-in fallback.
+- [x] The Docker guide (`docs/DEVELOPMENT.md`) with the URL rule, the data
+      folder's permissions and a Synology example; CI builds the image and
+      runs it on amd64 and arm64 (`scripts/docker-smoke.sh`).
+- [ ] A published image (GHCR) so self-hosters don't have to build it
+      themselves.
+
 Tester-Feedback Sept 2026 (done): the inventory is the master list and
 collections are built by moving copies out of it, per deck if wanted
 ([ADR 0032](adr/0032-collections-built-by-moving-copies.md)).
