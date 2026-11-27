@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Smoke test for the Docker setup (compose.yaml, Dockerfile), run by
-# .github/workflows/docker.yml. Builds the image once, then starts it the way
-# a self-hoster would: a custom host port, a data folder outside the
-# checkout, the image's own user and a Synology-style uid:gid. Each run signs
-# up, restarts and signs in again, so the database must persist in the host
-# folder.
+# Smoke test for the Docker setup (compose.yaml, compose.build.yaml,
+# Dockerfile), run by .github/workflows/docker.yml. Builds the image once
+# from the checkout, then starts it the way a self-hoster would: a custom
+# host port, a data folder outside the checkout, the image's own user and a
+# Synology-style uid:gid. Each run signs up, restarts and signs in again, so
+# the database must persist in the host folder.
+#
+# With SMOKE_SAVE_IMAGE=<file>, the tested image is written to that file
+# (`docker save`) once every scenario has passed; the workflow publishes it.
 #
 # Needs Docker with Compose >= 2.24, curl, jq and sudo (the data folders
 # belong to other uids). Run it from a checkout without a `.env`: compose.yaml
@@ -16,10 +19,16 @@ project=ygo-alpha-smoke
 tmp=$(mktemp -d)
 env_file="$tmp/smoke.env"
 secret=$(openssl rand -hex 32)
+save_image=${SMOKE_SAVE_IMAGE:-}
+published=ghcr.io/dinooo13/ygo-alpha:latest
+# The smoke test's own image name, so a run neither uses nor removes a
+# ygo-alpha:local you built yourself.
+image=ygo-alpha-smoke:local
+printf 'services:\n  app:\n    image: %s\n' "$image" > "$tmp/smoke.yaml"
 
 # Shell variables win over the env file in Compose interpolation.
 unset NUXT_BETTER_AUTH_SECRET NUXT_PUBLIC_BETTER_AUTH_URL \
-  YGO_ALPHA_PORT YGO_ALPHA_DATA_DIR YGO_ALPHA_USER \
+  YGO_ALPHA_PORT YGO_ALPHA_DATA_DIR YGO_ALPHA_USER YGO_ALPHA_IMAGE \
   COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES
 
 if [ -e "$repo/.env" ]; then
@@ -28,8 +37,20 @@ if [ -e "$repo/.env" ]; then
   exit 1
 fi
 
-compose() {
+# compose.yaml alone, as it runs for someone who pulls the published image.
+compose_pull() {
   docker compose -f "$repo/compose.yaml" -p "$project" --env-file "$env_file" "$@"
+}
+
+# compose.yaml with compose.build.yaml, as for a build from source.
+compose_build() {
+  docker compose -f "$repo/compose.yaml" -f "$repo/compose.build.yaml" \
+    -p "$project" --env-file "$env_file" "$@"
+}
+
+# The build from source under the smoke test's own image name.
+compose() {
+  compose_build -f "$tmp/smoke.yaml" "$@"
 }
 
 cleanup() {
@@ -40,7 +61,7 @@ cleanup() {
       compose logs --no-color || true
       echo "::endgroup::"
     fi
-    compose down -v --rmi local >/dev/null 2>&1 || true
+    compose down -v --rmi all >/dev/null 2>&1 || true
   fi
   sudo rm -rf "$tmp"
   exit "$status"
@@ -126,6 +147,23 @@ grep -q 'Set NUXT_BETTER_AUTH_SECRET' "$tmp/config.err" ||
 write_env '' ''
 assert_config 3000 "$repo/data" ''
 
+# compose.yaml alone builds nothing and runs the published image, or the one
+# YGO_ALPHA_IMAGE names; compose.build.yaml builds ygo-alpha:local instead.
+compose_pull config --format json | jq -e --arg image "$published" '
+    .services.app.image == $image and .services.app.build == null
+  ' > /dev/null || fail "compose.yaml alone does not run $published"
+pinned=ghcr.io/dinooo13/ygo-alpha:sha-1a2b3c4
+echo "YGO_ALPHA_IMAGE=$pinned" >> "$env_file"
+compose_pull config --format json | jq -e --arg image "$pinned" '
+    .services.app.image == $image
+  ' > /dev/null || fail "compose.yaml ignores YGO_ALPHA_IMAGE"
+compose_build config --format json | jq -e --arg context "$repo" '
+    .services.app.image == "ygo-alpha:local"
+    and .services.app.build.context == $context
+    and .services.app.build.dockerfile == "Dockerfile"
+  ' > /dev/null || fail "compose.build.yaml does not build ygo-alpha:local from $repo"
+write_env '' ''
+
 echo "== Build"
 compose build
 
@@ -189,5 +227,10 @@ scenario() {
 
 scenario default 8765 1001:1001 default
 scenario synology 8766 1026:100 custom
+
+if [ -n "$save_image" ]; then
+  docker save -o "$save_image" "$image"
+  echo "Saved $image to $save_image"
+fi
 
 echo "Docker smoke test passed."

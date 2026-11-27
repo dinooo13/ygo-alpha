@@ -1,6 +1,11 @@
 # Self-hosting with Docker Compose (docs/DEVELOPMENT.md, "Docker"). Needs
-# Docker Compose 2.24 or newer. Set these in a `.env` file next to this file
-# (Compose reads it for the ${...} below and also hands it to the container):
+# Docker Compose 2.24 or newer. This file runs the published image
+# (ghcr.io/dinooo13/ygo-alpha, built and tested by .github/workflows/docker.yml
+# for amd64 and arm64), so it is the only file you need next to `.env`.
+# To build from a checkout instead, add compose.build.yaml (see there).
+#
+# Set these in a `.env` file next to this file (Compose reads it for the
+# ${...} below and also hands it to the container):
 #
 #   NUXT_BETTER_AUTH_SECRET      required: a long random string, e.g.
 #                                `openssl rand -base64 32`
@@ -13,15 +18,16 @@
 #                                first start, owned by YGO_ALPHA_USER
 #   YGO_ALPHA_USER               uid:gid the app runs as (default: the
 #                                image's `nuxt` user, 1001:1001)
+#   YGO_ALPHA_IMAGE              the image to run (default
+#                                ghcr.io/dinooo13/ygo-alpha:latest); pin a
+#                                build with its tag, e.g. :sha-1a2b3c4
 #
 # Inside the container the app always listens on port 3000 and keeps its
 # database in /app/data; the `environment:` values below win over the same
 # names in `.env`.
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: '${YGO_ALPHA_IMAGE:-ghcr.io/dinooo13/ygo-alpha:latest}'
     # Empty = the image's own user (`USER nuxt` in the Dockerfile).
     user: '${YGO_ALPHA_USER:-}'
     ports:

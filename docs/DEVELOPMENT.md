@@ -553,21 +553,28 @@ pnpm preview
 
 ### Docker
 
-`compose.yaml` builds the image from your checkout and runs it; there is no published image to pull. You need Docker Compose 2.24 or newer (`docker compose version`). The build compiles the app and the SQLite driver, so it needs a few GB of RAM and takes a while, noticeably longer on small or ARM NAS models. CI builds the image and runs it on amd64 and arm64 for every change (`.github/workflows/docker.yml`, `scripts/docker-smoke.sh`).
+`compose.yaml` runs the published image, `ghcr.io/dinooo13/ygo-alpha`, for amd64 (generic x86-64, no AVX needed) and arm64. You need Docker Compose 2.24 or newer (`docker compose version`), and only two files: `compose.yaml` and your `.env`. CI builds the image natively on both architectures, runs it the way a self-hoster would (`scripts/docker-smoke.sh`), and publishes exactly the image it tested (`.github/workflows/docker.yml`, `scripts/docker-publish.sh`). The tags:
+
+| Tag | What it is |
+| --- | --- |
+| `latest` | The newest build of `main`. |
+| `sha-1a2b3c4` | The build of that commit (the first 7 characters of its SHA), to pin a version or go back to one. |
+| `1.2.3` | A release, for a version tag `v1.2.3`. |
 
 **The URL rule:** set `NUXT_PUBLIC_BETTER_AUTH_URL` to exactly the URL people open in the browser, with scheme, host and port, for example `http://192.168.1.10:8080` or `https://ygo.example.com`. Better Auth refuses sign-in and sign-up from any other origin with HTTP 403. The default, `http://localhost:<YGO_ALPHA_PORT>`, only works in a browser on the Docker host itself. If people reach the app under more than one address, put the others in `BETTER_AUTH_TRUSTED_ORIGINS` in `.env` (comma-separated, no spaces, no trailing slash, e.g. `http://192.168.1.10:8080,https://ygo.example.com`). With an `https://` URL the login cookie is marked Secure, so the browser only sends it over HTTPS (behind a reverse proxy). Over plain HTTP on a LAN address, the app works, but browsers turn off what needs a secure context: offline use and installing the app (the service worker), and copying links to the clipboard. For those, put it behind HTTPS (a reverse proxy) or open it as `localhost`.
 
-Start it from the checkout:
+Start it in a folder of its own (a checkout works too, it already has `compose.yaml`):
 
 ```bash
-mkdir -p data && sudo chown 1001:1001 data
+mkdir -p ygo-alpha/data && cd ygo-alpha && sudo chown 1001:1001 data
+curl -fsSLO https://raw.githubusercontent.com/dinooo13/ygo-alpha/main/compose.yaml
 cat > .env <<EOF
 NUXT_BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 NUXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
 NUXT_INVITE_CODE=pick-a-code-for-your-playgroup
 NUXT_ADMIN_TOKEN=$(openssl rand -hex 32)
 EOF
-docker compose up --build -d
+docker compose up -d
 ```
 
 Then load the catalog once, as in the [README](../README.md#get-started) (on your `YGO_ALPHA_PORT`). These settings in `.env` change how the container is run:
@@ -579,16 +586,17 @@ Then load the catalog once, as in the [README](../README.md#get-started) (on you
 | `YGO_ALPHA_PORT` | `3000` | The port on the host. |
 | `YGO_ALPHA_DATA_DIR` | `./data` | The host folder for the database (`app.db`). Start it with `./` or `/`: anything else is read as the name of a Docker volume, and `compose.yaml` declares none. |
 | `YGO_ALPHA_USER` | the image's `nuxt` user (`1001:1001`) | The `uid:gid` the app runs as. |
+| `YGO_ALPHA_IMAGE` | `ghcr.io/dinooo13/ygo-alpha:latest` | The image to run, for example `ghcr.io/dinooo13/ygo-alpha:sha-1a2b3c4` to stay on one build. A build from source ignores it. |
 
 `.env` is used twice: Compose reads the settings above from it, and the whole file is also handed to the container, so the app's own settings (`NUXT_INVITE_CODE`, `NUXT_ADMIN_TOKEN`, `NUXT_ASSISTANT_*`, see [`.env.example`](../.env.example)) go there too. Inside the container the app always listens on port 3000 and keeps its database in `/app/data`: `compose.yaml` sets `NODE_ENV`, `NITRO_PORT` and `NUXT_DB_FILE_PATH` itself, and the same names in `.env` don't change them (a `PORT` or `NUXT_DB_FILE_PATH` meant for `pnpm dev` has no effect).
 
 **The data folder:** the app has to be able to write it. Docker creates a missing folder as root, which the app's user can't write, so create the folder before the first start and either give it to the image's user (`sudo chown 1001:1001 <folder>`) or set `YGO_ALPHA_USER` to the folder owner's `uid:gid`. The app creates `app.db` and applies the migrations when it starts. Keep the folder on a local disk: SQLite on a network share (NFS, SMB) can corrupt the database. For a backup, copy `app.db` while the container is stopped.
 
-**Synology (DSM, Container Manager):** over SSH on the NAS (Control Panel → Terminal & SNMP → Enable SSH service), as your own user, put the checkout in `/volume1/docker/ygo-alpha` (with `git`, for example from the Git Server package, or unpack the source ZIP from GitHub there). Check `sudo docker compose version` first: Container Manager has shipped Compose versions older than 2.24, which can't read this `compose.yaml`; in that case use the `docker run` sketch below. Replace `192.168.1.10` with the address of your NAS:
+**Synology (DSM, Container Manager):** over SSH on the NAS (Control Panel → Terminal & SNMP → Enable SSH service), as your own user. Check `sudo docker compose version` first: Container Manager has shipped Compose versions older than 2.24, which can't read this `compose.yaml`; in that case use the `docker run` sketch below. The published image also runs on NAS CPUs without AVX, such as the Celeron J4125 in a DS720+, which can't build the image themselves (see "Building from source"). Replace `192.168.1.10` with the address of your NAS:
 
 ```bash
-cd /volume1/docker/ygo-alpha
-mkdir -p data
+mkdir -p /volume1/docker/ygo-alpha/data && cd /volume1/docker/ygo-alpha
+curl -fsSLO https://raw.githubusercontent.com/dinooo13/ygo-alpha/main/compose.yaml
 cat > .env <<EOF
 NUXT_BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 NUXT_PUBLIC_BETTER_AUTH_URL=http://192.168.1.10:8080
@@ -598,32 +606,40 @@ YGO_ALPHA_USER=$(id -u):$(id -g)
 NUXT_INVITE_CODE=pick-a-code-for-your-playgroup
 NUXT_ADMIN_TOKEN=$(openssl rand -hex 32)
 EOF
-sudo docker compose up --build -d
+sudo docker compose up -d
 ```
 
 `id -u` and `id -g` print your user's ids (often something like `1026` and `100`); `mkdir` made you the owner of `data`, so the app can write it without a `chown`. The app is then at `http://192.168.1.10:8080`.
 
-**Updating:** pull the new version (`git pull`, or unpack the new source ZIP over the checkout, keeping `.env` and `data/`), then rebuild (on Synology with `sudo`):
+**Updating:** pull the new image and restart with it (on Synology with `sudo`):
 
 ```bash
-git pull
+docker compose pull
+docker compose up -d
+```
+
+The database stays in the data folder, and new migrations run on startup. To go back, set `YGO_ALPHA_IMAGE` to the `sha-…` tag you ran before and run `docker compose up -d`; a newer version may have migrated the database already, so copy `app.db` before updating if you want to be able to return. `compose.yaml` itself rarely changes; when it does, download it again (the `curl` line above). Old images pile up; `docker image prune` removes them.
+
+**Building from source:** from a checkout, `compose.build.yaml` builds the image instead of pulling it (as `ygo-alpha:local`). Add it to `.env`, so every `docker compose` command uses it:
+
+```bash
+echo 'COMPOSE_FILE=compose.yaml:compose.build.yaml' >> .env
 docker compose up --build -d
 ```
 
-The database stays in the data folder, and new migrations run on startup. Old image layers pile up; `docker image prune` removes them.
+To update, `git pull` (or unpack the new source ZIP over the checkout, keeping `.env` and `data/`), then `docker compose up --build -d` again. The build compiles the app and the SQLite driver, so it needs a few GB of RAM and takes a while, noticeably longer on small or ARM NAS models. On x86-64 it also needs a CPU with AVX: without it, the build tools crash with `Illegal instruction` (for example on the Celeron J4125). Use the published image there.
 
-**Upgrading from an older `compose.yaml`:** it used to fall back to a built-in secret when `NUXT_BETTER_AUTH_SECRET` wasn't set. That fallback is gone, so `docker compose` now stops until `.env` has a secret. Add one (`openssl rand -base64 32`); everyone is logged out once, accounts and data stay.
+**Upgrading from an older `compose.yaml`:** it used to fall back to a built-in secret when `NUXT_BETTER_AUTH_SECRET` wasn't set. That fallback is gone, so `docker compose` now stops until `.env` has a secret. Add one (`openssl rand -base64 32`); everyone is logged out once, accounts and data stay. It also used to build the image from the checkout; it now pulls the published one, and `compose.build.yaml` (above) keeps the build.
 
 **Without Compose:** a sketch with `docker run`, with the secret and `NUXT_PUBLIC_BETTER_AUTH_URL=http://192.168.1.10:8080` in `.env`:
 
 ```bash
-docker build -t ygo-alpha .
 docker run -d --name ygo-alpha --restart unless-stopped \
   -p 8080:3000 -v /srv/ygo-alpha/data:/app/data --user 1001:1001 \
-  --env-file .env ygo-alpha
+  --env-file .env ghcr.io/dinooo13/ygo-alpha:latest
 ```
 
-Here nothing pins the container side: the app listens on `PORT` (default 3000) and keeps its database at `NUXT_DB_FILE_PATH` (default `/app/data/app.db`), so leave both out of that `.env` or keep them at those values.
+Here nothing pins the container side: the app listens on `PORT` (default 3000) and keeps its database at `NUXT_DB_FILE_PATH` (default `/app/data/app.db`), so leave both out of that `.env` or keep them at those values. To update, `docker pull ghcr.io/dinooo13/ygo-alpha:latest`, then remove the container (`docker rm -f ygo-alpha`) and run the same `docker run` again. To build the image yourself instead, `docker build -t ygo-alpha .` in a checkout and run `ygo-alpha` in place of the GHCR name.
 
 ### Plesk (ygo-alpha.de)
 
@@ -652,7 +668,8 @@ tests/nuxt/           # Vitest unit/component tests
 e2e/                  # Playwright end-to-end tests
 docs/                 # Product roadmap, ADRs, and additional documentation
 Dockerfile            # Multi-stage build for the production container
-compose.yaml          # Docker Compose setup for local/self-hosted operation
+compose.yaml          # Docker Compose setup for self-hosting (the published image)
+compose.build.yaml    # Compose override that builds the image from the checkout
 ```
 
 ## Outlook

@@ -1,10 +1,15 @@
 name: Docker
 
 # Builds the image and runs it as a self-hoster would (scripts/docker-smoke.sh),
-# on amd64 and arm64. Nothing is pushed to a registry.
+# natively on amd64 and arm64. Pushes to main and version tags then publish the
+# tested images, unchanged, as one multi-arch image to GHCR
+# (scripts/docker-publish.sh): main as `latest` and `sha-<short sha>`, a tag
+# v1.2.3 as `1.2.3` and `sha-<short sha>`. Pull requests rehearse the publish
+# against a throwaway local registry and push nothing.
 on:
   push:
     branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   pull_request:
     branches: [main]
 
@@ -35,4 +40,92 @@ jobs:
           persist-credentials: false
 
       - name: Build and smoke test
+        env:
+          SMOKE_SAVE_IMAGE: ${{ runner.temp }}/image-${{ matrix.arch }}.tar
         run: scripts/docker-smoke.sh
+
+      # Only written when every scenario passed.
+      - name: Keep the tested image
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: image-${{ matrix.arch }}
+          path: ${{ runner.temp }}/image-${{ matrix.arch }}.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  # Pull requests: the same publish steps against a local registry, so a
+  # broken publish shows up before the merge.
+  publish-rehearsal:
+    name: Publish rehearsal (local registry)
+    if: github.event_name == 'pull_request'
+    needs: smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      registry:
+        image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+        ports:
+          - 5000:5000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Download the tested images
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/images
+
+      - name: Publish to the local registry
+        env:
+          IMAGES: ${{ runner.temp }}/images
+        run: scripts/docker-publish.sh localhost:5000/ygo-alpha "$IMAGES" latest "sha-${GITHUB_SHA::7}"
+
+  publish:
+    name: Publish to GHCR
+    if: github.event_name == 'push'
+    needs: smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # The only job that can write packages.
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REPOSITORY: ghcr.io/dinooo13/ygo-alpha
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Download the tested images
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/images
+
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish
+        env:
+          IMAGES: ${{ runner.temp }}/images
+        run: |
+          tags=("sha-${GITHUB_SHA::7}")
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            tags+=("${GITHUB_REF_NAME#v}")
+          else
+            tags+=(latest)
+          fi
+          scripts/docker-publish.sh "$REPOSITORY" "$IMAGES" "${tags[@]}"
+
+      - name: Log out
+        if: always()
+        run: docker logout ghcr.io
