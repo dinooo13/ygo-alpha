@@ -27,8 +27,11 @@ but pushed nothing.
    under emulation, so the published bits are the tested ones.
 2. **Tags:** a push to `main` publishes `latest` and `sha-<7-char SHA>`; a
    tag `vX.Y.Z` publishes `X.Y.Z` and `sha-<7-char SHA>` (not `latest`, which
-   follows `main`). The per-arch staging tags `ci-amd64` and `ci-arm64` are
-   overwritten on every publish.
+   follows `main`). `sha-…` is written once per commit: builds aren't
+   reproducible, so a version tag on a commit `main` already published points
+   at that image instead of its own build. Publishes run one at a time. The
+   per-arch staging tags `ci-amd64` and `ci-arm64` are overwritten on every
+   publish.
 3. **Permissions:** only the `publish` job gets `packages: write`, and it
    runs only for pushes; it logs in with the workflow's `GITHUB_TOKEN`.
    Pull requests run the same script against a throwaway local registry

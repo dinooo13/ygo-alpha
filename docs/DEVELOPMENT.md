@@ -618,7 +618,7 @@ docker compose pull
 docker compose up -d
 ```
 
-The database stays in the data folder, and new migrations run on startup. To go back, set `YGO_ALPHA_IMAGE` to the `sha-…` tag you ran before and run `docker compose up -d`; a newer version may have migrated the database already, so copy `app.db` before updating if you want to be able to return. `compose.yaml` itself rarely changes; when it does, download it again (the `curl` line above). Old images pile up; `docker image prune` removes them.
+The database stays in the data folder, and new migrations run on startup. To be able to go back, note which `sha-…` tag `latest` points at before you pull (the [package page](https://github.com/dinooo13/ygo-alpha/pkgs/container/ygo-alpha) lists the tags per version), or run a pinned `sha-…` tag in `YGO_ALPHA_IMAGE` and change it to update. To go back, set `YGO_ALPHA_IMAGE` to the tag you ran before and run `docker compose up -d`; a newer version may have migrated the database already, so copy `app.db` before updating if you want to be able to return. `compose.yaml` itself rarely changes; when it does, download it again (the `curl` line above). Old images pile up; `docker image prune` removes them.
 
 **Building from source:** from a checkout, `compose.build.yaml` builds the image instead of pulling it (as `ygo-alpha:local`). Add it to `.env`, so every `docker compose` command uses it:
 
