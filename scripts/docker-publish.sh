@@ -27,11 +27,6 @@ dir=$2
 commit_tag=$3
 shift 3
 
-annotations=(
-  --annotation 'index:org.opencontainers.image.source=https://github.com/dinooo13/ygo-alpha'
-  --annotation 'index:org.opencontainers.image.description=A card collection, deck builder, format checker and tournament organizer for the Yu-Gi-Oh! trading card game'
-)
-
 # digests <ref>: the sorted manifest digests of a manifest list, one line.
 digests() {
   docker buildx imagetools inspect --raw "$1" | jq -r '[.manifests[].digest] | sort | join(" ")'
@@ -46,7 +41,7 @@ if docker buildx imagetools inspect "$repository:$commit_tag" > /dev/null 2>&1; 
   for tag in "${tags[@]}"; do
     tag_args+=(--tag "$repository:$tag")
   done
-  docker buildx imagetools create "${annotations[@]}" "${tag_args[@]}" "$repository:$commit_tag"
+  docker buildx imagetools create "${tag_args[@]}" "$repository:$commit_tag"
 else
   tags=("$commit_tag" "$@")
   sources=()
@@ -74,7 +69,7 @@ else
   for tag in "${tags[@]}"; do
     tag_args+=(--tag "$repository:$tag")
   done
-  docker buildx imagetools create "${annotations[@]}" "${tag_args[@]}" "${sources[@]}"
+  docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 fi
 
 # Every tag must now name a list of the two platforms with the same digests
