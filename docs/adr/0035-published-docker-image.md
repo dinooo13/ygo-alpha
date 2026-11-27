@@ -29,7 +29,7 @@ but pushed nothing.
    tag `vX.Y.Z` publishes `X.Y.Z` and `sha-<7-char SHA>` (not `latest`, which
    follows `main`). `sha-…` is written once per commit: builds aren't
    reproducible, so a version tag on a commit `main` already published points
-   at that image instead of its own build. Publishes run one at a time. The
+   at that image instead of its own build. Publishes of the same commit run one at a time. The
    per-arch staging tags `ci-amd64` and `ci-arm64` are overwritten on every
    publish.
 3. **Permissions:** only the `publish` job gets `packages: write`, and it

@@ -101,10 +101,11 @@ jobs:
     permissions:
       contents: read
       packages: write
-    # One publish at a time across refs: main and a version tag on the same
-    # commit share the staging tags and sha-<short sha>.
+    # Main and a version tag on the same commit share sha-<short sha>, so their
+    # publishes take turns. Per commit, so a pending release publish is never
+    # replaced by the next commit's (a group keeps one pending job).
     concurrency:
-      group: docker-publish
+      group: docker-publish-${{ github.sha }}
       cancel-in-progress: false
     env:
       REPOSITORY: ghcr.io/dinooo13/ygo-alpha
