@@ -4,8 +4,10 @@ name: Docker
 # natively on amd64 and arm64. Pushes to main and version tags then publish the
 # tested images, unchanged, as one multi-arch image to GHCR
 # (scripts/docker-publish.sh): main as `latest` and `sha-<short sha>`, a tag
-# v1.2.3 as `1.2.3` and `sha-<short sha>`. Pull requests rehearse the publish
-# against a throwaway local registry and push nothing.
+# v1.2.3 as `1.2.3` and `sha-<short sha>`. A commit is published once: a tag on
+# a commit main already published gets that image, not its own rebuild. Pull
+# requests rehearse the publish against a throwaway local registry and push
+# nothing.
 on:
   push:
     branches: [main]
@@ -79,14 +81,19 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/images
 
+      # As for a push to main, then for a version tag on that commit, which
+      # must reuse the image instead of publishing a second build.
       - name: Publish to the local registry
         env:
           IMAGES: ${{ runner.temp }}/images
-        run: scripts/docker-publish.sh localhost:5000/ygo-alpha "$IMAGES" latest "sha-${GITHUB_SHA::7}"
+        run: |
+          scripts/docker-publish.sh localhost:5000/ygo-alpha "$IMAGES" "sha-${GITHUB_SHA::7}" latest
+          scripts/docker-publish.sh localhost:5000/ygo-alpha /nonexistent "sha-${GITHUB_SHA::7}" 1.2.3
 
   publish:
     name: Publish to GHCR
-    if: github.event_name == 'push'
+    # Not on forks: their token can't write this package.
+    if: github.event_name == 'push' && github.repository == 'dinooo13/ygo-alpha'
     needs: smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -94,6 +101,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # One publish at a time across refs: main and a version tag on the same
+    # commit share the staging tags and sha-<short sha>.
+    concurrency:
+      group: docker-publish
+      cancel-in-progress: false
     env:
       REPOSITORY: ghcr.io/dinooo13/ygo-alpha
     steps:
@@ -118,14 +130,9 @@ jobs:
         env:
           IMAGES: ${{ runner.temp }}/images
         run: |
-          tags=("sha-${GITHUB_SHA::7}")
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then
-            tags+=("${GITHUB_REF_NAME#v}")
+            tag=${GITHUB_REF_NAME#v}
           else
-            tags+=(latest)
+            tag=latest
           fi
-          scripts/docker-publish.sh "$REPOSITORY" "$IMAGES" "${tags[@]}"
-
-      - name: Log out
-        if: always()
-        run: docker logout ghcr.io
+          scripts/docker-publish.sh "$REPOSITORY" "$IMAGES" "sha-${GITHUB_SHA::7}" "$tag"
