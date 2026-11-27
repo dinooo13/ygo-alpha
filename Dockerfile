@@ -27,6 +27,10 @@ RUN pnpm build
 
 # ---- Runtime ------------------------------------------------------------
 FROM base AS runtime
+# Links the image published to GHCR (.github/workflows/docker.yml) to this
+# repository.
+LABEL org.opencontainers.image.source="https://github.com/dinooo13/ygo-alpha" \
+  org.opencontainers.image.description="A card collection, deck builder, format checker and tournament organizer for the Yu-Gi-Oh! trading card game"
 ENV NODE_ENV=production
 ENV NUXT_DB_FILE_PATH=/app/data/app.db
 WORKDIR /app

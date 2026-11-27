@@ -42,3 +42,4 @@ mark the old as superseded.
 | [0032](0032-collections-built-by-moving-copies.md) | Collections are built by moving copies out of the inventory | Accepted |
 | [0033](0033-deploy-key-forced-command.md) | The deploy key runs one fixed script | Accepted |
 | [0034](0034-inventory-printings.md) | Printings in the inventory | Accepted (images per printing still open, #176) |
+| [0035](0035-published-docker-image.md) | A published Docker image on GHCR | Accepted |

@@ -135,17 +135,19 @@ Register an account, then load the card catalog once. It is fetched from YGOPROD
 curl -X POST http://localhost:3000/_nitro/tasks/catalog:sync
 ```
 
-**Self-hosting with Docker:**
+**Self-hosting with Docker:** the image is published for amd64 and arm64 (`ghcr.io/dinooo13/ygo-alpha`), so all you
+need is `compose.yaml` and a `.env`:
 
 ```bash
-mkdir -p data && sudo chown 1001:1001 data
+mkdir -p ygo-alpha/data && cd ygo-alpha && sudo chown 1001:1001 data
+curl -fsSLO https://raw.githubusercontent.com/dinooo13/ygo-alpha/main/compose.yaml
 cat > .env <<EOF
 NUXT_BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 NUXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
 NUXT_INVITE_CODE=pick-a-code-for-your-playgroup
 NUXT_ADMIN_TOKEN=$(openssl rand -hex 32)
 EOF
-docker compose up --build -d
+docker compose up -d
 
 # load the catalog once (and again whenever you want new cards)
 curl -X POST http://localhost:3000/api/admin/catalog/sync \
@@ -155,8 +157,8 @@ curl -X POST http://localhost:3000/api/admin/catalog/sync \
 Set `NUXT_PUBLIC_BETTER_AUTH_URL` to exactly the address people open, such as `http://192.168.1.10:8080`: from any
 other address, login fails. `YGO_ALPHA_PORT`, `YGO_ALPHA_DATA_DIR` and `YGO_ALPHA_USER` in `.env` choose the host
 port, the folder for the SQLite database and the user the app runs as. The [Docker guide](docs/DEVELOPMENT.md#docker)
-explains them, with a Synology example and how to update. With `NUXT_INVITE_CODE` set, only people who know the code
-can register; without it, anyone can. Migrations run on startup. For the assistant, set an OpenAI-compatible endpoint
+explains them, with a Synology example, how to update, and how to build the image from source instead. With
+`NUXT_INVITE_CODE` set, only people who know the code can register; without it, anyone can. Migrations run on startup. For the assistant, set an OpenAI-compatible endpoint
 and key in `.env` (see [`.env.example`](.env.example)). The app works without one, only the assistant is turned off.
 
 The [**Developer guide**](docs/DEVELOPMENT.md) covers configuration, German card data, the rule engine in

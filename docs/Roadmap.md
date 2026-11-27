@@ -164,8 +164,10 @@ fork.
 - [x] The Docker guide (`docs/DEVELOPMENT.md`) with the URL rule, the data
       folder's permissions and a Synology example; CI builds the image and
       runs it on amd64 and arm64 (`scripts/docker-smoke.sh`).
-- [ ] A published image (GHCR) so self-hosters don't have to build it
-      themselves.
+- [x] A published image (GHCR, amd64 and arm64) so self-hosters don't have
+      to build it themselves: CI publishes the images it smoke-tested, and
+      `compose.yaml` pulls `ghcr.io/dinooo13/ygo-alpha:latest`;
+      `compose.build.yaml` keeps the build from source.
 
 Tester-Feedback Sept 2026 (done): the inventory is the master list and
 collections are built by moving copies out of it, per deck if wanted
